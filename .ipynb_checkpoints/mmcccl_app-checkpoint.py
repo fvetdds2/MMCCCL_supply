@@ -2,17 +2,25 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
+# Page Config
+st.set_page_config(page_title="MMCCCL Lab Supply Tracker", layout="wide")
+
 # Load Excel
 @st.cache_data
 def load_data():
-    df = pd.read_excel("MMCCCL_supply_july.xlsx")
+    df = pd.read_excel("MMCCCL_supply_july.xlsx", engine="openpyxl")
     df['expiration'] = pd.to_datetime(df['expiration'], errors='coerce')
+    df['ordered'] = False
+    df['order_date'] = pd.NaT
     return df
 
-df = load_data()
+# Initialize or load data into session_state
+if 'df' not in st.session_state:
+    st.session_state.df = load_data()
+
+df = st.session_state.df
 
 # App Title
-st.set_page_config(page_title="MMCCCL Lab Supply Tracker", layout="wide")
 st.title("🧪 MMCCCL Lab Supply Tracker")
 
 # Tabs
@@ -32,9 +40,13 @@ with tab1:
     add_qty = st.number_input("Add quantity to update", min_value=0, step=1)
 
     if st.button("Update Quantity"):
-        idx = df[df['cat_no.'] == cat_selected].index[0]
-        df.at[idx, 'quantity'] += add_qty
-        st.success(f"Updated quantity of {item_name} to {df.at[idx, 'quantity']}")
+        idxs = df[df['cat_no.'] == cat_selected].index
+        if not idxs.empty:
+            idx = idxs[0]
+            df.at[idx, 'quantity'] += add_qty
+            st.success(f"Updated quantity of {item_name} to {df.at[idx, 'quantity']}")
+        else:
+            st.error("Item not found!")
 
 # Tab 2: Item Location
 with tab2:
@@ -49,12 +61,28 @@ with tab3:
     expired_items = df[df['expiration'] < today].copy()
 
     if not expired_items.empty:
-        st.warning("Some items are past expiration and need to be reordered.")
-        st.dataframe(expired_items[['item', 'cat_no.', 'quantity', 'expiration']], use_container_width=True)
+        st.warning("Some items are past expiration and may need to be reordered.")
+
+        for idx, row in expired_items.iterrows():
+            col1, col2, col3 = st.columns([5, 2, 3])
+            with col1:
+                st.markdown(f"**{row['item']}** (Cat#: {row['cat_no.']}) - Exp: {row['expiration'].date()}")
+            with col2:
+                ordered = st.checkbox("Ordered", key=f"ordered_{idx}", value=row['ordered'])
+            with col3:
+                order_date = st.date_input("Order Date", value=row['order_date'] if pd.notna(row['order_date']) else today, key=f"order_date_{idx}")
+
+            # Save changes to the session state DataFrame
+            df.at[idx, 'ordered'] = ordered
+            df.at[idx, 'order_date'] = order_date if ordered else pd.NaT
+
+        # Display updated reorder table
+        st.subheader("📋 Current Reorder Status")
+        st.dataframe(df[df['expiration'] < today][['item', 'cat_no.', 'quantity', 'expiration', 'ordered', 'order_date']], use_container_width=True)
     else:
         st.success("No expired items at the moment.")
 
 # Tab 4: Notes or Future Feature
 with tab4:
     st.header("📝 Notes or Future Additions")
-    st.info("This tab can be used for adding reorder buttons, PDF export, or lab manager notes.")
+    st.info("This tab can be used for adding reorder buttons, PDF/CSV export, or lab manager notes.")
