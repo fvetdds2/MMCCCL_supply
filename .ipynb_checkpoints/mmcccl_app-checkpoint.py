@@ -5,27 +5,52 @@ import io
 
 # ---- Page Config ----
 st.set_page_config(page_title="Lab Supply Tracker", layout="wide")
-st.image("mmcccl_logo.png", width=400)
+
+# ---- Title and Logo in Columns for Side-by-Side Layout ----
+# Create two columns, with the first being a quarter of the width of the second.
+col1, col2 = st.columns([1, 4])
+with col1:
+    # Place the logo in the first column with a smaller width for a better fit.
+    st.image("mmcccl_logo.png", width=150)
+with col2:
+    # Place the title in the second column.
+    st.title("🧪 MMCCCL Lab Supply Tracker")
+
+
 # ---- Load Excel Data ----
 @st.cache_data
 def load_data():
-    df = pd.read_excel("MMCCCL_supply_july.xlsx", engine="openpyxl")
+    """Loads and preprocesses the data from the Excel file."""
+    # The excel file name should be 'MMCCCL_supply_july.xlsx'
+    try:
+        df = pd.read_excel("MMCCCL_supply_july.xlsx", engine="openpyxl")
+    except FileNotFoundError:
+        st.error("Error: The file 'MMCCCL_supply_july.xlsx' was not found.")
+        return pd.DataFrame() # Return an empty DataFrame to prevent errors
+    
+    # Convert 'expiration' to datetime, handling potential errors
     df['expiration'] = pd.to_datetime(df['expiration'], errors='coerce')
-    df['ordered'] = df.get('ordered', False)
-    df['order_date'] = pd.to_datetime(df.get('order_date', pd.NaT), errors='coerce')
+    
+    # Ensure 'ordered' and 'order_date' columns exist
+    if 'ordered' not in df.columns:
+        df['ordered'] = False
+    if 'order_date' not in df.columns:
+        df['order_date'] = pd.NaT
+    df['order_date'] = pd.to_datetime(df['order_date'], errors='coerce')
+    
     return df
 
 # ---- Session State Init ----
+# Initialize session state for the DataFrame and the log
 if 'df' not in st.session_state:
     st.session_state.df = load_data()
 if 'log' not in st.session_state:
-    st.session_state.log = pd.DataFrame(columns=['timestamp', 'cat_no.', 'action', 'quantity', 'initials'])
+    # Now includes 'lot_number' and 'expiration' in the log DataFrame
+    st.session_state.log = pd.DataFrame(columns=['timestamp', 'cat_no.', 'action', 'quantity', 'initials', 'lot_number', 'expiration'])
 
+# Get the DataFrames from session state
 df = st.session_state.df
 log_df = st.session_state.log
-
-# ---- App Title ----
-st.title("🧪 MMCCCL Lab Supply Tracker")
 
 # ---- Tabs ----
 tab1, tab2, tab3, tab4 = st.tabs([
