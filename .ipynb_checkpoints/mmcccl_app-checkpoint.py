@@ -40,9 +40,18 @@ with tab1:
     st.subheader("📊 Inventory Level & Tracker")
 
     search_term = st.text_input("Search catalog number:")
-    filtered_cat_nos = sorted([cat for cat in df['cat_no.'].unique() if search_term in str(cat)])
+    filtered_cat_nos = sorted(
+    [
+        cat
+        for cat in df['cat_no.'].unique()
+        if pd.notna(cat) and (search_term.lower() in str(cat).lower())
+    ]
+)
+    if not filtered_cat_nos:
+    st.warning("No catalog numbers found.")
+    else:
     selected_cat = st.selectbox("Select Catalog Number", filtered_cat_nos)
-
+    
     item_data = df[df['cat_no.'] == selected_cat]
     item_name = item_data['item'].values[0]
     total_qty = item_data['quantity'].sum()
