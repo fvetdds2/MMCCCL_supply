@@ -46,10 +46,10 @@ with tab1:
         for cat in df['cat_no.'].unique()
         if pd.notna(cat) and (search_term.lower() in str(cat).lower())
     ]
-)
-        if not filtered_cat_nos:
+    )
+    if not filtered_cat_nos:
         st.warning("No catalog numbers found.")
-        else:
+    else:
         selected_cat = st.selectbox("Select Catalog Number", filtered_cat_nos)
     
     item_data = df[df['cat_no.'] == selected_cat]
