@@ -38,7 +38,7 @@ st.markdown("""
 col1, col2 = st.columns([1, 4])
 with col1:
     # Use the provided image file for the logo
-    st.image("mmcccl_logo.png", width=400)
+    st.image("mmcccl_logo.png", width=800)
 with col2:
     # Per user request, the title text has been removed.
     # The columns remain to maintain the layout of the logo.
