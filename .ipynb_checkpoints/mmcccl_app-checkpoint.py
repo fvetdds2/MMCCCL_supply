@@ -3,10 +3,9 @@ import pandas as pd
 from datetime import datetime
 import io
 
-# ---- Page Config ----
 st.set_page_config(page_title="Lab Supply Tracker", layout="wide")
 
-# Inject custom CSS for a more attractive page
+
 st.markdown("""
     <style>
     .big-font {
@@ -33,16 +32,9 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# ---- Title and Logo in Columns for Side-by-Side Layout ----
-# Create two columns, with the first being a quarter of the width of the second.
-col1, col2 = st.columns([1, 4])
-with col1:
-    # Use the provided image file for the logo
+
     st.image("mmcccl_logo.png", width=800)
-with col2:
-    # Per user request, the title text has been removed.
-    # The columns remain to maintain the layout of the logo.
-    pass
+
 
 # ---- Load Excel Data ----
 @st.cache_data
