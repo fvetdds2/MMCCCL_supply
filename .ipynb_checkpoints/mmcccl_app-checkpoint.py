@@ -33,7 +33,7 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 
-    st.image("mmcccl_logo.png", width=800)
+st.image("mmcccl_logo.png", use_column_width=True)
 
 
 # ---- Load Excel Data ----
