@@ -121,9 +121,9 @@ with tab1:
                             'item': item_name,
                             'cat_no.': selected_cat,
                             'quantity': add_qty,
-                            'location': selected_df['location'].iloc[0] if not selected_df.empty 
+                            'location': item_data['location'].iloc[0] if not item_data.empty 
                     else "",
-                            'shelf': selected_df['shelf'].iloc[0] if not selected_df.empty else "",
+                            'shelf': item_data['shelf'].iloc[0] if not item_data.empty else "",
                             'expiration': expiration_date,
                             'ordered': False,
                             'order_date': pd.NaT
