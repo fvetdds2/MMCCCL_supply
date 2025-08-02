@@ -6,15 +6,44 @@ import io
 # ---- Page Config ----
 st.set_page_config(page_title="Lab Supply Tracker", layout="wide")
 
+# Inject custom CSS for a more attractive page
+st.markdown("""
+    <style>
+    .big-font {
+        font-size: 3em !important;
+        font-weight: bold;
+        color: #0072b2;
+        padding-top: 2rem;
+    }
+    .main-header {
+        color: #0072b2;
+        font-size: 2.5em;
+        font-weight: 600;
+        margin-bottom: 0;
+    }
+    .secondary-header {
+        color: #4b8c6a;
+        font-size: 1.5em;
+        font-weight: 500;
+        margin-top: 0;
+    }
+    .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p {
+        font-size: 1.25rem;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
 # ---- Title and Logo in Columns for Side-by-Side Layout ----
 # Create two columns, with the first being a quarter of the width of the second.
 col1, col2 = st.columns([1, 4])
 with col1:
     # Place the logo in the first column with a smaller width for a better fit.
-    st.image("mmcccl_logo.png", width=600)
+    # The new logo is now used.
+    st.image("image_8dbdae.png", width=150)
 with col2:
-    # Place the title in the second column.
-    st.title("🧪 Lab Supply Tracker")
+    # Use Markdown with custom CSS classes for a bigger, more attractive title
+    st.markdown("<p class='main-header'>🧪 Meharry Medical College</p>", unsafe_allow_html=True)
+    st.markdown("<p class='secondary-header'>Consolidated Clinical Laboratory</p>", unsafe_allow_html=True)
 
 
 # ---- Load Excel Data ----
