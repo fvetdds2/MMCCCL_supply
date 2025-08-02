@@ -39,18 +39,15 @@ st.image("mmcccl_logo.png", use_container_width=True)
 # ---- Load Excel Data ----
 @st.cache_data
 def load_data():
-    """Loads and preprocesses the data from the Excel file."""
-    # The excel file name should be 'MMCCCL_supply_july.xlsx'
     try:
         df = pd.read_excel("MMCCCL_supply_july.xlsx", engine="openpyxl")
     except FileNotFoundError:
         st.error("Error: The file 'MMCCCL_supply_july.xlsx' was not found.")
-        return pd.DataFrame() # Return an empty DataFrame to prevent errors
+        return pd.DataFrame() 
     
-    # Convert 'expiration' to datetime, handling potential errors
+    
     df['expiration'] = pd.to_datetime(df['expiration'], errors='coerce')
-    
-    # Ensure 'ordered' and 'order_date' columns exist
+     
     if 'ordered' not in df.columns:
         df['ordered'] = False
     if 'order_date' not in df.columns:
@@ -60,14 +57,12 @@ def load_data():
     return df
 
 # ---- Session State Init ----
-# Initialize session state for the DataFrame and the log
+
 if 'df' not in st.session_state:
     st.session_state.df = load_data()
 if 'log' not in st.session_state:
-    # Now includes 'lot_number' and 'expiration' in the log DataFrame
     st.session_state.log = pd.DataFrame(columns=['timestamp', 'cat_no.', 'action', 'quantity', 'initials', 'lot_number', 'expiration'])
 
-# Get the DataFrames from session state
 df = st.session_state.df
 log_df = st.session_state.log
 
@@ -120,53 +115,64 @@ with tab1:
                 if not initials:
                     st.error("Please enter your initials to submit an update.")
                 else:
-                    idxs = df[df['cat_no.'] == selected_cat].index
-                    if not idxs.empty:
-                        idx = idxs[0]
-                        net_change = add_qty - remove_qty
-                        df.at[idx, 'quantity'] += net_change
+                    timestamp = datetime.now()
+                    if add_qty > 0:
+ new_row = {
+                            'item': item_name,
+                            'cat_no.': selected_cat,
+                            'quantity': add_qty,
+                            'location': selected_df['location'].iloc[0] if not selected_df.empty else "",
+                            'shelf': selected_df['shelf'].iloc[0] if not selected_df.empty else "",
+                            'expiration': expiration_date,
+                            'ordered': False,
+                            'order_date': pd.NaT
+                        }
+                        df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
 
-                        timestamp = datetime.now()
-                        
-                        # Log additions with lot number and expiration date
-                        if add_qty > 0:
-                            new_log = pd.DataFrame([{
-                                'timestamp': timestamp,
-                                'cat_no.': selected_cat,
-                                'action': 'Add',
-                                'quantity': add_qty,
-                                'initials': initials,
-                                'lot_number': lot_number,
-                                'expiration': expiration_date
-                            }])
-                            st.session_state.log = pd.concat([st.session_state.log, new_log], ignore_index=True)
+                        log_df = pd.concat([log_df, pd.DataFrame([{
+                            'timestamp': timestamp,
+                            'cat_no.': selected_cat,
+                            'action': 'Add',
+                            'quantity': add_qty,
+                            'initials': initials,
+                            'lot_number': lot_number,
+                            'expiration': expiration_date
+                        }])], ignore_index=True)
 
-                        # Log removals with lot number and expiration date
-                        if remove_qty > 0:
-                            new_log = pd.DataFrame([{
-                                'timestamp': timestamp,
-                                'cat_no.': selected_cat,
-                                'action': 'Remove',
-                                'quantity': remove_qty,
-                                'initials': initials,
-                                'lot_number': lot_number,
-                                'expiration': expiration_date
-                            }])
-                            st.session_state.log = pd.concat([st.session_state.log, new_log], ignore_index=True)
+                    # Remove quantity (from oldest to newest, non-expired first)
+                    if remove_qty > 0:
+                        to_deduct = remove_qty
+                        indices = df[(df['cat_no.'] == selected_cat)].sort_values(by='expiration').index
+                        for i in indices:
+                            if to_deduct <= 0:
+                                break
+                            available = df.at[i, 'quantity']
+                            if available <= to_deduct:
+                                to_deduct -= available
+                                df.at[i, 'quantity'] = 0
+                            else:
+                                df.at[i, 'quantity'] -= to_deduct
+                                to_deduct = 0
 
-                        st.success(f"Inventory updated. New quantity: {df.at[idx, 'quantity']}")
-                    else:
-                        st.error("Item not found!")
+                        log_df = pd.concat([log_df, pd.DataFrame([{
+                            'timestamp': timestamp,
+                            'cat_no.': selected_cat,
+                            'action': 'Remove',
+                            'quantity': remove_qty,
+                            'initials': initials,
+                            'lot_number': lot_number,
+                            'expiration': expiration_date
+                        }])], ignore_index=True)
 
-    # Show history for this item
-    st.markdown("#### 🔁 Update History")
-    # Check if a catalog number is selected before filtering the log
-    if 'selected_cat' in locals() and selected_cat:
-        history = log_df[log_df['cat_no.'] == selected_cat].sort_values(by='timestamp', ascending=False)
-        st.dataframe(history, use_container_width=True)
-    else:
-        st.info("Please select a catalog number to view its history.")
+                    st.session_state.df = df[df['quantity'] > 0].copy()
+                    st.session_state.log = log_df
+                    st.success("Inventory successfully updated.")
+                    st.rerun()
 
+            # Show log
+            st.markdown("#### 🔁 Update History")
+            history = log_df[log_df['cat_no.'] == selected_cat].sort_values(by='timestamp', ascending=False)
+            st.dataframe(history, use_container_width=True)
 
 # ---- Tab 2: Item Locations ----
 with tab2:
