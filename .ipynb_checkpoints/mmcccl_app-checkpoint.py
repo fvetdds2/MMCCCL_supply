@@ -170,29 +170,31 @@ with tab2:
         st.dataframe(df[['item', 'cat_no.', 'location', 'shelf']].sort_values('item'), use_container_width=True)
 
 # ---- Tab 3: Expiring Items ----
+# ---- Tab 3 ----
 with tab3:
     st.subheader("⚠️ Items Needing Reorder (Expired)")
     today = datetime.now()
-    
-    if not df.empty:
-        expired = df[df['expiration'] < today]
-        if expired.empty:
-            st.success("🎉 No expired items!")
-        else:
-            st.warning("Some items have passed expiration:")
-            for idx, row in expired.iterrows():
-                col1, col2, col3 = st.columns([5, 2, 3])
-                with col1:
-                    st.markdown(f"**{row['item']}** (Cat#: {row['cat_no.']}) - Exp: {row['expiration'].date()}")
-                with col2:
-                    ordered = st.checkbox("Ordered", key=f"ordered_{idx}", value=row['ordered'])
-                with col3:
-                    order_date = st.date_input("Order Date", value=row['order_date'] if pd.notna(row['order_date']) else today, key=f"order_date_{idx}")
-                df.at[idx, 'ordered'] = ordered
-                df.at[idx, 'order_date'] = order_date if ordered else pd.NaT
 
-            st.subheader("📋 Current Reorder Table")
-            st.dataframe(df[df['expiration'] < today][['item', 'cat_no.', 'quantity', 'expiration', 'ordered', 'order_date']], use_container_width=True)
+    df['expiration'] = pd.to_datetime(df['expiration'], errors='coerce')  # Ensure datetime
+    expired = df[df['expiration'].notna() & (df['expiration'] < today)]
+
+    if expired.empty:
+        st.success("🎉 No expired items!")
+    else:
+        st.warning("Some items are expired:")
+        for idx, row in expired.iterrows():
+            col1, col2, col3 = st.columns([5, 2, 3])
+            with col1:
+                st.markdown(f"**{row['item']}** (Cat#: {row['cat_no.']}) - Exp: {row['expiration'].date()}")
+            with col2:
+                ordered = st.checkbox("Ordered", key=f"ordered_{idx}", value=row['ordered'])
+            with col3:
+                order_date = st.date_input("Order Date", value=row['order_date'] if pd.notna(row['order_date']) else today, key=f"order_date_{idx}")
+            df.at[idx, 'ordered'] = ordered
+            df.at[idx, 'order_date'] = order_date if ordered else pd.NaT
+
+        st.subheader("📋 Current Reorder Table")
+        st.dataframe(expired[['item', 'cat_no.', 'quantity', 'expiration', 'ordered', 'order_date']], use_container_width=True)
 
 # ---- Tab 4: Export Data ----
 with tab4:
