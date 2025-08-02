@@ -75,12 +75,19 @@ tab1, tab2, tab3, tab4 = st.tabs([
 with tab1:
     st.subheader("📊 Inventory Level & Tracker")
 
-    search_term = st.text_input("Search catalog number:")
-    all_cat_nos = df['cat_no.'].astype(str).unique()
-    filtered_cat_nos = sorted([cat for cat in all_cat_nos if search_term.lower() in str(cat).lower()])
+    search_term = st.text_input("Search catalog number or item name:").lower()
+
+    # Ensure strings for search
+    df['cat_no.'] = df['cat_no.'].astype(str)
+    df['item'] = df['item'].astype(str)
+
+    # Filter catalog numbers based on search in either cat_no. or item name
+    filtered_cat_nos = sorted(
+        df[df['cat_no.'].str.lower().str.contains(search_term) | df['item'].str.lower().str.contains(search_term)]['cat_no.'].unique()
+    )
 
     if not filtered_cat_nos:
-        st.warning("No catalog numbers found.")
+        st.warning("No catalog numbers or items found.")
     else:
         selected_cat = st.selectbox("Select Catalog Number", filtered_cat_nos)
         item_data = df[df['cat_no.'] == selected_cat]
@@ -163,6 +170,7 @@ with tab1:
         st.markdown("#### 🔁 Update History")
         history = log_df[log_df['cat_no.'] == selected_cat].sort_values(by='timestamp', ascending=False)
         st.dataframe(history, use_container_width=True)
+
 # ---- Tab 2: Item Locations ----
 with tab2:
     st.subheader("📦 Item Locations")
