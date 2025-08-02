@@ -40,10 +40,11 @@ with tab1:
     st.subheader("📊 Inventory Level & Tracker")
 
     search_term = st.text_input("Search catalog number:")
+    all_cat_nos = df['cat_no.'].astype(str).unique()
     filtered_cat_nos = sorted(
     [
         cat
-        for cat in df['cat_no.'].unique()
+        for cat in all_cat_nos
         if pd.notna(cat) and (search_term.lower() in str(cat).lower())
     ]
     )
