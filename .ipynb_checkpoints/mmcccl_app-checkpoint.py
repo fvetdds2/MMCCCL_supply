@@ -4,8 +4,8 @@ from datetime import datetime
 import io
 
 # ---- Page Config ----
-st.set_page_config(page_title="MMCCCL Lab Supply Tracker", layout="wide")
-
+st.set_page_config(page_title="Lab Supply Tracker", layout="wide")
+st.image("mmcccl_logo.png", width=150)
 # ---- Load Excel Data ----
 @st.cache_data
 def load_data():
