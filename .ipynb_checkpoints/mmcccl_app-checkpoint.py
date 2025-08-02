@@ -11,7 +11,7 @@ st.set_page_config(page_title="Lab Supply Tracker", layout="wide")
 col1, col2 = st.columns([1, 4])
 with col1:
     # Place the logo in the first column with a smaller width for a better fit.
-    st.image("mmcccl_logo.png", width=400)
+    st.image("mmcccl_logo.png", width=600)
 with col2:
     # Place the title in the second column.
     st.title("🧪 Lab Supply Tracker")
