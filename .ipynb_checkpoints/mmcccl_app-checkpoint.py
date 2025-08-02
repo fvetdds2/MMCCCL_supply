@@ -117,11 +117,12 @@ with tab1:
                 else:
                     timestamp = datetime.now()
                     if add_qty > 0:
- new_row = {
+                        new_row = {
                             'item': item_name,
                             'cat_no.': selected_cat,
                             'quantity': add_qty,
-                            'location': selected_df['location'].iloc[0] if not selected_df.empty else "",
+                            'location': selected_df['location'].iloc[0] if not selected_df.empty 
+                    else "",
                             'shelf': selected_df['shelf'].iloc[0] if not selected_df.empty else "",
                             'expiration': expiration_date,
                             'ordered': False,
