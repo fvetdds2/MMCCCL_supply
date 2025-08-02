@@ -37,16 +37,12 @@ st.markdown("""
 # Create two columns, with the first being a quarter of the width of the second.
 col1, col2 = st.columns([1, 4])
 with col1:
-    # The image file "image_8dbdae.png" could not be found.
-    # A placeholder image is used here to avoid the error.
-    # If you have your logo file in the same directory as this script, you can
-    # change this line to st.image("image_8dbdae.png", width=150)
-    st.image("https://placehold.co/150x150/0072b2/fff?text=MMCCCL+Logo", width=150)
+    # Use the provided image file for the logo
+    st.image("mmcccl_logo.png", width=400)
 with col2:
-    # Use Markdown with custom CSS classes for a bigger, more attractive title
-    st.markdown("<p class='main-header'>🧪 Meharry Medical College</p>", unsafe_allow_html=True)
-    st.markdown("<p class='secondary-header'>Consolidated Clinical Laboratory</p>", unsafe_allow_html=True)
-
+    # Per user request, the title text has been removed.
+    # The columns remain to maintain the layout of the logo.
+    pass
 
 # ---- Load Excel Data ----
 @st.cache_data
