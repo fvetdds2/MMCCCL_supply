@@ -191,7 +191,7 @@ with tab1:
 # ---- Tab 2 ----
 with tab2:
     st.subheader("📦 Item Locations")
-
+    df['location'] = df['location'].astype(str)
     sorted_df = df.sort_values(by='location')
     editable_df = sorted_df[['item', 'cat_no.', 'location', 'shelf']].copy()
 
