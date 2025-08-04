@@ -1,3 +1,8 @@
+from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
+import av
+import json
+from pyzbar.pyzbar import decode
+import cv2
 import streamlit as st
 import pandas as pd
 from datetime import datetime
@@ -104,6 +109,53 @@ with tab1:
         with col2:
             lot_number = st.text_input("Lot Number", key="lot_number")
             expiration_date = st.date_input("Expiration Date", key="expiration_date")
+st.markdown("### 📷 Scan QR Code to Auto-Fill Fields")
+st.info("Ensure your QR contains JSON with keys: cat_no, action, quantity, initials, lot_number, expiration")
+
+# Placeholder session state for scanned data
+if "scanned_data" not in st.session_state:
+    st.session_state.scanned_data = {}
+
+class QRCodeProcessor(VideoTransformerBase):
+    def __init__(self):
+        self.result = {}
+
+    def transform(self, frame):
+        img = frame.to_ndarray(format="bgr24")
+        decoded_objs = decode(img)
+
+        for obj in decoded_objs:
+            try:
+                self.result = json.loads(obj.data.decode('utf-8'))
+            except json.JSONDecodeError:
+                self.result = {"error": "Invalid QR code data"}
+        return img
+
+ctx = webrtc_streamer(key="qr", video_transformer_factory=QRCodeProcessor)
+
+if ctx.video_transformer and ctx.video_transformer.result:
+    scanned = ctx.video_transformer.result
+    if "cat_no" in scanned:
+        st.success(f"Scanned QR: {scanned}")
+        st.session_state.scanned_data = scanned
+    else:
+        st.warning("QR code does not contain valid item data.")
+
+# Autofill fields from scanned data
+auto = st.session_state.scanned_data
+if auto:
+    if auto.get("cat_no") in filtered_cat_nos:
+        selected_cat = auto["cat_no"]
+        initials = auto.get("initials", "")
+        add_qty = int(auto["quantity"]) if auto.get("action") == "add" else 0
+        remove_qty = int(auto["quantity"]) if auto.get("action") == "remove" else 0
+        lot_number = auto.get("lot_number", "")
+        try:
+            expiration_date = datetime.strptime(auto.get("expiration", ""), "%Y-%m-%d").date()
+        except:
+            expiration_date = datetime.today().date()
+    else:
+        st.error("Scanned catalog number not found in inventory.")
 
         if st.button("Submit Update"):
             if not initials:
