@@ -1,11 +1,8 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
-import cv2
 from datetime import datetime
-from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, WebRtcMode
-import av
-import json
+import io
+
 # Page setup
 st.set_page_config(page_title="Lab Supply Tracker", layout="wide")
 
@@ -76,83 +73,103 @@ tab1, tab2, tab3, tab4 = st.tabs([
 
 # ---- Tab 1 ----
 with tab1:
-    st.subheader("📦 Add Inventory Items")
+    st.subheader("📊 Inventory Level & Tracker")
 
-    # Mode selection
-    mode = st.radio("Choose Input Method:", ["Manual Entry", "QR Code Scanner"])
+    search_term = st.text_input("Search catalog number or item name:").lower()
 
-    if mode == "Manual Entry":
-        with st.form("manual_entry_form"):
-            cat_no = st.text_input("Catalog Number")
-            item_name = st.text_input("Item Name")
-            quantity = st.number_input("Quantity", step=1, min_value=1)
-            location = st.text_input("Location")
-            expiration = st.date_input("Expiration Date")
+    # Ensure strings for search
+    df['cat_no.'] = df['cat_no.'].astype(str)
+    df['item'] = df['item'].astype(str)
 
-            submit = st.form_submit_button("Add to Inventory")
-            if submit:
-                new_entry = {
-                    "timestamp": datetime.now(),
-                    "cat_no.": cat_no,
-                    "item_name": item_name,
-                    "quantity": quantity,
-                    "location": location,
-                    "expiration": expiration
-                }
-                df = pd.concat([df, pd.DataFrame([new_entry])], ignore_index=True)
-                st.success("Item added successfully!")
+    # Filter catalog numbers based on search in either cat_no. or item name
+    filtered_cat_nos = sorted(
+        df[df['cat_no.'].str.lower().str.contains(search_term) | df['item'].str.lower().str.contains(search_term)]['cat_no.'].unique()
+    )
 
+    if not filtered_cat_nos:
+        st.warning("No catalog numbers or items found.")
     else:
-        st.info("Align a QR code with camera. It must contain JSON like: "
-                "`{\"cat_no\": \"ABC123\", \"item_name\": \"Buffer\", \"quantity\": 10, \"location\": \"Shelf A\", \"expiration\": \"2025-10-10\"}`")
+        selected_cat = st.selectbox("Select Catalog Number", filtered_cat_nos)
+        item_data = df[df['cat_no.'] == selected_cat]
+        item_name = item_data['item'].values[0] if not item_data.empty else "N/A"
+        total_qty = item_data['quantity'].sum() if not item_data.empty else 0
+        st.metric(label=f"{item_name} (Cat#: {selected_cat})", value=total_qty)
 
-        scanned_data = st.empty()
+        initials = st.text_input("Your initials:")
 
-        class VideoProcessor(VideoProcessorBase):
-            def __init__(self):
-                self.qr_data = None
+        col1, col2 = st.columns(2)
+        with col1:
+            add_qty = st.number_input("Add Quantity", min_value=0, step=1, key="add_qty")
+            remove_qty = st.number_input("Remove Quantity", min_value=0, step=1, key="remove_qty")
+        with col2:
+            lot_number = st.text_input("Lot Number", key="lot_number")
+            expiration_date = st.date_input("Expiration Date", key="expiration_date")
 
-            def recv(self, frame):
-                img = frame.to_ndarray(format="bgr24")
-                qr = cv2.QRCodeDetector()
-                data, bbox, _ = qr.detectAndDecode(img)
+        if st.button("Submit Update"):
+            if not initials:
+                st.error("Please enter your initials.")
+            else:
+                timestamp = datetime.now()
 
-                if bbox is not None:
-                    bbox = bbox.astype(int)
-                    for i in range(len(bbox[0])):
-                        pt1 = tuple(bbox[0][i])
-                        pt2 = tuple(bbox[0][(i+1) % len(bbox[0])])
-                        cv2.line(img, pt1, pt2, (0, 255, 0), 2)
+                # Add item
+                if add_qty > 0:
+                    new_row = {
+                        'item': item_name,
+                        'cat_no.': selected_cat,
+                        'quantity': add_qty,
+                        'location': item_data['location'].iloc[0] if not item_data.empty else "",
+                        'shelf': item_data['shelf'].iloc[0] if not item_data.empty else "",
+                        'expiration': expiration_date,
+                        'ordered': False,
+                        'order_date': pd.NaT
+                    }
+                    df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
 
-                    if data:
-                        self.qr_data = data
-                        cv2.putText(img, f"Scanned: {data[:30]}", (10, 30),
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+                    log_df = pd.concat([log_df, pd.DataFrame([{
+                        'timestamp': timestamp,
+                        'cat_no.': selected_cat,
+                        'action': 'Add',
+                        'quantity': add_qty,
+                        'initials': initials,
+                        'lot_number': lot_number,
+                        'expiration': expiration_date
+                    }])], ignore_index=True)
 
-                return av.VideoFrame.from_ndarray(img, format="bgr24")
+                # Remove quantity
+                if remove_qty > 0:
+                    to_deduct = remove_qty
+                    indices = df[df['cat_no.'] == selected_cat].sort_values(by='expiration').index
+                    for i in indices:
+                        if to_deduct <= 0:
+                            break
+                        available = df.at[i, 'quantity']
+                        if available <= to_deduct:
+                            to_deduct -= available
+                            df.at[i, 'quantity'] = 0
+                        else:
+                            df.at[i, 'quantity'] -= to_deduct
+                            to_deduct = 0
 
-        ctx = webrtc_streamer(
-            key="qr-scanner",
-            mode=WebRtcMode.SENDRECV,
-            video_processor_factory=VideoProcessor,
-            media_stream_constraints={"video": True, "audio": False},
-            async_processing=True,
-        )
+                    log_df = pd.concat([log_df, pd.DataFrame([{
+                        'timestamp': timestamp,
+                        'cat_no.': selected_cat,
+                        'action': 'Remove',
+                        'quantity': remove_qty,
+                        'initials': initials,
+                        'lot_number': lot_number,
+                        'expiration': expiration_date
+                    }])], ignore_index=True)
 
-        if ctx.video_processor and ctx.video_processor.qr_data:
-            try:
-                parsed = json.loads(ctx.video_processor.qr_data)
-                parsed["timestamp"] = datetime.now()
-                parsed["expiration"] = pd.to_datetime(parsed.get("expiration"), errors='coerce')
+                df['quantity'] = pd.to_numeric(df['quantity'], errors='coerce').fillna(0).astype(int)
+                st.session_state.df = df[df['quantity'] > 0].copy()
+                st.session_state.log = log_df
+                st.success("Inventory successfully updated.")
+                st.rerun()
 
-                df = pd.concat([df, pd.DataFrame([parsed])], ignore_index=True)
-                scanned_data.success(f"Item added: {parsed.get('item_name')}")
-
-                # Reset the QR data so it doesn't keep adding
-                ctx.video_processor.qr_data = None
-
-            except Exception as e:
-                scanned_data.error(f"Invalid QR data: {e}")
+        # Show history
+        st.markdown("#### 🔁 Update History")
+        history = log_df[log_df['cat_no.'] == selected_cat].sort_values(by='timestamp', ascending=False)
+        st.dataframe(history, use_container_width=True)
 
 # ---- Tab 2: Item Locations ----
 with tab2:
