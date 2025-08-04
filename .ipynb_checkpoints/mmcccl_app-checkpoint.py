@@ -185,8 +185,8 @@ with tab1:
                 df['quantity'] = pd.to_numeric(df['quantity'], errors='coerce').fillna(0).astype(int)
                 st.session_state.df = df[df['quantity'] > 0].copy()
                 st.session_state.log = log_df
-                 st.success("Inventory successfully updated.")
-            st.session_state['rerun_needed'] = True
+                st.success("Inventory successfully updated.")
+                st.session_state['rerun_needed'] = True
 
         if st.session_state.get('rerun_needed', False):
             st.session_state['rerun_needed'] = False
