@@ -70,19 +70,21 @@ tab1, tab2, tab3, tab4 = st.tabs([
 with tab1:
     st.subheader("📊 Inventory Level & Tracker")
     search_term = st.text_input("Search catalog number or item name:").lower()
-    df['cat_no.'] = df['cat_no.'].astype(str)
-    df['item'] = df['item'].astype(str)
+    st.session_state.df['cat_no.'] = st.session_state.df['cat_no.'].astype(str)
+    st.session_state.df['item'] = st.session_state.df['item'].astype(str)
 
-    filtered_cat_nos = sorted(df[df['cat_no.'].str.lower().str.contains(search_term) | df['item'].str.lower().str.contains(search_term)]['cat_no.'].unique())
+    filtered_cat_nos = sorted(st.session_state.df[st.session_state.df['cat_no.'].str.lower().str.contains(search_term) | st.session_state.df['item'].str.lower().str.contains(search_term)]['cat_no.'].unique())
     if not filtered_cat_nos:
         st.warning("No catalog numbers or items found.")
     else:
         selected_cat = st.selectbox("Select Catalog Number", filtered_cat_nos)
-        item_data = df[df['cat_no.'] == selected_cat]
+        item_data = st.session_state.df[st.session_state.df['cat_no.'] == selected_cat]
         item_name = item_data['item'].values[0] if not item_data.empty else "N/A"
         total_qty = item_data['quantity'].sum() if not item_data.empty else 0
+        
+        # Display the metric here to always show the latest quantity
         st.metric(label=f"{item_name} (Cat#: {selected_cat})", value=total_qty)
-
+        
         col1, col2 = st.columns(2)
         with col1:
             add_qty = st.number_input("Add Quantity", min_value=0, step=1, key="add_qty")
@@ -107,35 +109,35 @@ with tab1:
                     'ordered': False,
                     'order_date': pd.NaT
                 }
-                df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-                log_df = pd.concat([log_df, pd.DataFrame([{
+                st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([new_row])], ignore_index=True)
+                st.session_state.log = pd.concat([st.session_state.log, pd.DataFrame([{
                     'timestamp': timestamp, 'cat_no.': selected_cat, 'action': 'Add',
                     'quantity': add_qty, 'initials': user_initials, 'lot #': lot_number_add, 'expiration': expiration_date_add
                 }])], ignore_index=True)
 
             if remove_qty > 0:
-                idx_match = df[(df['cat_no.'] == selected_cat) & (df['lot #'] == lot_number_remove) & (df['expiration'] == expiration_remove)].index
+                idx_match = st.session_state.df[(st.session_state.df['cat_no.'] == selected_cat) & (st.session_state.df['lot #'] == lot_number_remove) & (st.session_state.df['expiration'] == expiration_remove)].index
                 for i in idx_match:
-                    available = df.at[i, 'quantity']
+                    available = st.session_state.df.at[i, 'quantity']
                     if remove_qty >= available:
                         remove_qty -= available
-                        df.at[i, 'quantity'] = 0
+                        st.session_state.df.at[i, 'quantity'] = 0
                     else:
-                        df.at[i, 'quantity'] -= remove_qty
+                        st.session_state.df.at[i, 'quantity'] -= remove_qty
                         remove_qty = 0
-                log_df = pd.concat([log_df, pd.DataFrame([{
+                st.session_state.log = pd.concat([st.session_state.log, pd.DataFrame([{
                     'timestamp': timestamp, 'cat_no.': selected_cat, 'action': 'Remove',
                     'quantity': st.session_state.remove_qty if 'remove_qty' in st.session_state else 0,
                     'initials': user_initials, 'lot #': lot_number_remove, 'expiration': expiration_remove
                 }])], ignore_index=True)
 
-            df['quantity'] = pd.to_numeric(df['quantity'], errors='coerce').fillna(0).astype(int)
-            st.session_state.df = df[df['quantity'] > 0].copy()
-            st.session_state.log = log_df
+            st.session_state.df['quantity'] = pd.to_numeric(st.session_state.df['quantity'], errors='coerce').fillna(0).astype(int)
+            st.session_state.df = st.session_state.df[st.session_state.df['quantity'] > 0].copy()
             st.success("Inventory successfully updated.")
+            st.rerun()
 
         st.markdown("#### 🔁 Update History")
-        st.dataframe(log_df[log_df['cat_no.'] == selected_cat].sort_values(by='timestamp', ascending=False), use_container_width=True)
+        st.dataframe(st.session_state.log[st.session_state.log['cat_no.'] == selected_cat].sort_values(by='timestamp', ascending=False), use_container_width=True)
 
 # ---- Tab 2 ----
 with tab2:
