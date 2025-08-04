@@ -188,71 +188,72 @@ with tab1:
 
 
 # ---- Tab 2: Item Locations with audit trail ----
+# ---- Tab 2 ----
 with tab2:
     st.subheader("📦 Item Locations")
-    if not df.empty:
-        st.markdown("Edit location or shelf and click '💾 Save Changes'")
 
-        editable_df = df[['item', 'cat_no.', 'location', 'shelf']].copy()
-        edited_table = st.data_editor(
-            editable_df,
-            use_container_width=True,
-            num_rows="dynamic",
-            key="editable_location",
-            column_config={
-                "item": st.column_config.Column(disabled=True),
-                "cat_no.": st.column_config.Column(disabled=True)
-            }
-        )
+    search_term_loc = st.text_input("Search catalog number or item name to edit location:").lower()
 
-        if st.button("💾 Save Changes"):
+    filtered_items = df[
+        df['cat_no.'].str.lower().str.contains(search_term_loc) |
+        df['item'].str.lower().str.contains(search_term_loc)
+    ]
+
+    if filtered_items.empty:
+        st.warning("No matching items found.")
+    else:
+        selected_idx = st.selectbox("Select Item:", options=filtered_items.index, format_func=lambda i: f"{df.at[i, 'item']} (Cat#: {df.at[i, 'cat_no.']})")
+
+        old_location = df.at[selected_idx, 'location']
+        old_shelf = df.at[selected_idx, 'shelf']
+
+        new_location = st.text_input("Update Location:", value=old_location)
+        new_shelf = st.text_input("Update Shelf:", value=old_shelf)
+
+        if st.button("Save Location Update"):
             changes_made = False
-            audit_entries = []
-            for idx, row in edited_table.iterrows():
-                cat = row['cat_no.']
-                item = row['item']
+            timestamp = datetime.now()
 
-                # Old values from df (use first match)
-                old_location = df.loc[(df['cat_no.'] == cat) & (df['item'] == item), 'location'].iloc[0]
-                old_shelf = df.loc[(df['cat_no.'] == cat) & (df['item'] == item), 'shelf'].iloc[0]
+            # Check and update location
+            if pd.notna(new_location) and pd.notna(old_location) and new_location != old_location:
+                audit_df = pd.concat([audit_df, pd.DataFrame([{
+                    'timestamp': timestamp,
+                    'user': user_initials,
+                    'cat_no.': df.at[selected_idx, 'cat_no.'],
+                    'item': df.at[selected_idx, 'item'],
+                    'field': 'location',
+                    'old_value': old_location,
+                    'new_value': new_location
+                }])], ignore_index=True)
+                df.at[selected_idx, 'location'] = new_location
+                changes_made = True
 
-                # Check and update location
-                if row['location'] != old_location:
-                    df.loc[(df['cat_no.'] == cat) & (df['item'] == item), 'location'] = row['location']
-                    changes_made = True
-                    audit_entries.append({
-                        'timestamp': datetime.now(),
-                        'user': user_initials,
-                        'cat_no.': cat,
-                        'item': item,
-                        'field': 'location',
-                        'old_value': old_location,
-                        'new_value': row['location']
-                    })
-
-                # Check and update shelf
-                if row['shelf'] != old_shelf:
-                    df.loc[(df['cat_no.'] == cat) & (df['item'] == item), 'shelf'] = row['shelf']
-                    changes_made = True
-                    audit_entries.append({
-                        'timestamp': datetime.now(),
-                        'user': user_initials,
-                        'cat_no.': cat,
-                        'item': item,
-                        'field': 'shelf',
-                        'old_value': old_shelf,
-                        'new_value': row['shelf']
-                    })
+            # Check and update shelf
+            if pd.notna(new_shelf) and pd.notna(old_shelf) and new_shelf != old_shelf:
+                audit_df = pd.concat([audit_df, pd.DataFrame([{
+                    'timestamp': timestamp,
+                    'user': user_initials,
+                    'cat_no.': df.at[selected_idx, 'cat_no.'],
+                    'item': df.at[selected_idx, 'item'],
+                    'field': 'shelf',
+                    'old_value': old_shelf,
+                    'new_value': new_shelf
+                }])], ignore_index=True)
+                df.at[selected_idx, 'shelf'] = new_shelf
+                changes_made = True
 
             if changes_made:
                 st.session_state.df = df
-                if audit_entries:
-                    audit_df = pd.DataFrame(audit_entries)
-                    st.session_state.location_audit_log = pd.concat([st.session_state.location_audit_log, audit_df], ignore_index=True)
-                st.success("Changes saved successfully!")
+                st.session_state.location_audit_log = audit_df
+                st.success("Location and shelf updated successfully.")
             else:
-                st.info("No changes detected.")
+                st.info("No changes were made.")
 
+    st.markdown("#### 🕒 Location Audit Trail")
+    if audit_df.empty:
+        st.info("No location changes recorded yet.")
+    else:
+        st.dataframe(audit_df.sort_values(by="timestamp", ascending=False), use_container_width=True)
 # ---- Tab 3: Expiring Items ----
 with tab3:
     st.subheader("⚠️ Items Needing Reorder (Expired)")
