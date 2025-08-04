@@ -188,7 +188,6 @@ with tab1:
 
 
 # ---- Tab 2: Item Locations with audit trail ----
-# ---- Tab 2 ----
 with tab2:
     st.subheader("📦 Item Locations")
     df['location'] = df['location'].astype(str)
@@ -262,41 +261,109 @@ with tab2:
 
 # ---- Tab 3: Expiring Items ----
 with tab3:
-    st.subheader("⚠️ Items Needing Reorder (Expired)")
+    st.subheader("⚠️ Items Needing Reorder")
+
     today = datetime.now()
+    two_months_from_now = today + pd.DateOffset(months=2)
 
-    df['expiration'] = pd.to_datetime(df['expiration'], errors='coerce')  # Ensure datetime
+    # Ensure expiration is datetime
+    df['expiration'] = pd.to_datetime(df['expiration'], errors='coerce')
+
+    # Ensure 'order_unit' column exists
+    if 'order_unit' not in df.columns:
+        df['order_unit'] = ""
+
+    # Filter expired and soon-to-expire
     expired = df[df['expiration'].notna() & (df['expiration'] < today)]
+    soon_expire = df[df['expiration'].notna() & (df['expiration'] >= today) & (df['expiration'] <= two_months_from_now)]
 
-    if expired.empty:
-        st.success("🎉 No expired items!")
+    reorder_items = pd.concat([expired, soon_expire]).drop_duplicates()
+
+    if reorder_items.empty:
+        st.success("🎉 No expired or soon-to-expire items!")
     else:
-        st.warning("Some items are expired:")
-        for idx, row in expired.iterrows():
-            col1, col2, col3 = st.columns([5, 2, 3])
-            with col1:
-                st.markdown(f"**{row['item']}** (Cat#: {row['cat_no.']}) - Exp: {row['expiration'].date()}")
-            with col2:
-                ordered = st.checkbox("Ordered", key=f"ordered_{idx}", value=row['ordered'])
-            with col3:
-                order_date = st.date_input("Order Date", value=row['order_date'] if pd.notna(row['order_date']) else today, key=f"order_date_{idx}")
-            df.at[idx, 'ordered'] = ordered
-            df.at[idx, 'order_date'] = order_date if ordered else pd.NaT
+        st.warning("⚠️ Some items need to be reordered.")
 
-        st.subheader("📋 Current Reorder Table")
-        st.dataframe(expired[['item', 'cat_no.', 'quantity', 'expiration', 'ordered', 'order_date']], use_container_width=True)
+        # Show table with color coding
+        def highlight_rows(row):
+            if row['expiration'] < today:
+                return ['background-color: lightblue'] * len(row)  # Expired
+            elif row['expiration'] <= two_months_from_now:
+                return ['background-color: lightcoral'] * len(row)  # Expiring soon
+            return [''] * len(row)
+
+        st.dataframe(
+            reorder_items[['item', 'cat_no.', 'quantity', 'order_unit', 'expiration']]
+            .style.apply(highlight_rows, axis=1),
+            use_container_width=True
+        )
+
+        # --- Order quantity entry ---
+        st.markdown("### 🛒 Place an Order")
+        if 'order_log' not in st.session_state:
+            st.session_state.order_log = pd.DataFrame(columns=[
+                'timestamp', 'user', 'cat_no.', 'item', 'expiration', 'order_unit', 'quantity_order'
+            ])
+
+        order_records = []
+        for idx, row in reorder_items.iterrows():
+            qty = st.number_input(
+                f"Order quantity for {row['item']} (Cat#: {row['cat_no.']}, Unit: {row['order_unit']})",
+                min_value=0, step=1, key=f"order_qty_{idx}"
+            )
+            if qty > 0:
+                order_records.append({
+                    'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    'user': user_initials,
+                    'cat_no.': row['cat_no.'],
+                    'item': row['item'],
+                    'expiration': row['expiration'].strftime("%Y-%m-%d") if pd.notnull(row['expiration']) else "N/A",
+                    'order_unit': row['order_unit'],
+                    'quantity_order': qty
+                })
+
+        if st.button("✅ Save Order Log"):
+            if order_records:
+                st.session_state.order_log = pd.concat(
+                    [st.session_state.order_log, pd.DataFrame(order_records)],
+                    ignore_index=True
+                )
+                st.success("Order log saved successfully!")
+            else:
+                st.info("No order quantities entered.")
+
+        # --- Download log ---
+        if not st.session_state.order_log.empty:
+            st.markdown("### 📥 Download Order Log")
+            csv_buffer = io.StringIO()
+            st.session_state.order_log.to_csv(csv_buffer, index=False)
+            st.download_button(
+                label="Download Log CSV",
+                data=csv_buffer.getvalue(),
+                file_name="order_log.csv",
+                mime="text/csv"
+            )
+
 
 # ---- Tab 4: Export Data ----
 with tab4:
-    st.subheader("📁 Export Inventory, Update Log, and Location Audit Log")
+    st.subheader("📁 Export Inventory, Update Log, Location Audit Log, and Order Log")
     if not df.empty and not st.session_state.log.empty:
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            # Inventory sheet
             df.to_excel(writer, sheet_name='Inventory', index=False)
+            
+            # Update log
             st.session_state.log.to_excel(writer, sheet_name='Update_Log', index=False)
-            # Export audit log if exists
+            
+            # Location audit log
             if 'location_audit_log' in st.session_state and not st.session_state.location_audit_log.empty:
                 st.session_state.location_audit_log.to_excel(writer, sheet_name='Location_Audit_Log', index=False)
+            
+            # Order log
+            if 'order_log' in st.session_state and not st.session_state.order_log.empty:
+                st.session_state.order_log.to_excel(writer, sheet_name='Order_Log', index=False)
 
         st.download_button(
             label="⬇️ Download Excel",
@@ -304,6 +371,6 @@ with tab4:
             file_name="MMCCCL_lab_inventory_export.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
-        st.info("This includes inventory, update logs, and location audit logs.")
+        st.info("This includes Inventory, Update Log, Location Audit Log, and Order Log.")
     else:
         st.warning("No data to export.")
