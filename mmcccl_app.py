@@ -181,14 +181,7 @@ with tab1:
                 st.session_state.df = df[df['quantity'] > 0].copy()
                 st.session_state.log = log_df
                 st.success("Inventory successfully updated.")
-                st.session_state['rerun_needed'] = True
-
-        if st.session_state.get('rerun_needed', False):
-            st.session_state['rerun_needed'] = False
-            st.success("Reloading app to reflect changes...")
-            st.stop()  # This halts the app and triggers a rerun safely
-
-
+                       
         st.markdown("#### 🔁 Update History")
         history = log_df[log_df['cat_no.'] == selected_cat].sort_values(by='timestamp', ascending=False)
         st.dataframe(history, use_container_width=True)
