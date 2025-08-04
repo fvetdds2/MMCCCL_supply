@@ -143,45 +143,48 @@ with tab1:
 with tab2:
     st.subheader("📦 Item Locations")
 
-    # Use the DataFrame from the session state directly for editing
-    editable_df = st.session_state.df[['item', 'cat_no.', 'location', 'shelf']].copy()
+    # Create a unique identifier for each row to ensure edits are tracked correctly
+    editable_df_with_key = st.session_state.df.reset_index()
+    editable_df_with_key['key'] = editable_df_with_key['cat_no.'].astype(str) + '_' + editable_df_with_key['index'].astype(str)
 
+    # Use the data editor on a slice of the DataFrame that includes the unique key
     edited_table = st.data_editor(
-        editable_df, 
-        use_container_width=True, 
-        num_rows="dynamic", 
+        editable_df_with_key[['key', 'item', 'cat_no.', 'location', 'shelf']],
+        use_container_width=True,
+        num_rows="dynamic",
         key="editable_location",
-        column_config={"item": st.column_config.Column(disabled=True), "cat_no.": st.column_config.Column(disabled=True)}
+        column_config={
+            "key": st.column_config.Column(disabled=True, width="small"),
+            "item": st.column_config.Column(disabled=True),
+            "cat_no.": st.column_config.Column(disabled=True)
+        },
+        hide_index=True
     )
 
     if st.button("💾 Save Changes"):
         changes_made, audit_entries = False, []
-
+        
         # Iterate over the edited table to detect and apply changes
         for idx, row in edited_table.iterrows():
-            cat = row['cat_no.']
-            item = row['item']
-            
-            # Find the corresponding original row in the session state DataFrame
-            original_rows = st.session_state.df[(st.session_state.df['cat_no.'] == cat) & (st.session_state.df['item'] == item)]
-            if not original_rows.empty:
-                original_row = original_rows.iloc[0]
-                
-                for field in ['location', 'shelf']:
-                    if str(row[field]) != str(original_row[field]):
-                        # Update the session state DataFrame with the new value
-                        st.session_state.df.loc[original_rows.index, field] = row[field]
-                        changes_made = True
-                        audit_entries.append({
-                            'timestamp': datetime.now(), 
-                            'user': user_initials, 
-                            'cat_no.': cat, 
-                            'item': item,
-                            'field': field, 
-                            'old_value': original_row[field], 
-                            'new_value': row[field]
-                        })
+            key = row['key']
+            original_index = int(key.split('_')[1])
+            original_row = st.session_state.df.loc[original_index]
 
+            for field in ['location', 'shelf']:
+                if str(row[field]) != str(original_row[field]):
+                    # Update the session state DataFrame with the new value
+                    st.session_state.df.loc[original_index, field] = row[field]
+                    changes_made = True
+                    audit_entries.append({
+                        'timestamp': datetime.now(),
+                        'user': user_initials,
+                        'cat_no.': original_row['cat_no.'],
+                        'item': original_row['item'],
+                        'field': field,
+                        'old_value': original_row[field],
+                        'new_value': row[field]
+                    })
+        
         if changes_made:
             # Update the location audit log
             st.session_state.location_audit_log = pd.concat([st.session_state.location_audit_log, pd.DataFrame(audit_entries)], ignore_index=True)
@@ -191,7 +194,6 @@ with tab2:
             st.info("No changes detected.")
 
     st.dataframe(st.session_state.location_audit_log.sort_values(by="timestamp", ascending=False), use_container_width=True)
-
 # ---- Tab 3 ----
 with tab3:
     st.subheader("⚠️ Items Needing Reorder")
