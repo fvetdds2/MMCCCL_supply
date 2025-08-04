@@ -185,7 +185,9 @@ with tab1:
 
         if st.session_state.get('rerun_needed', False):
             st.session_state['rerun_needed'] = False
-            st.experimental_rerun()
+            st.success("Reloading app to reflect changes...")
+            st.stop()  # This halts the app and triggers a rerun safely
+
 
         st.markdown("#### 🔁 Update History")
         history = log_df[log_df['cat_no.'] == selected_cat].sort_values(by='timestamp', ascending=False)
