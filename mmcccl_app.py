@@ -51,7 +51,6 @@ def load_data():
         df['order_date'] = pd.NaT
     df['order_date'] = pd.to_datetime(df['order_date'], errors='coerce')
     df['quantity'] = pd.to_numeric(df['quantity'], errors='coerce').fillna(0).astype(int)
-    # Ensure location and shelf columns exist (if not, create empty)
     if 'location' not in df.columns:
         df['location'] = ""
     if 'shelf' not in df.columns:
@@ -99,11 +98,9 @@ with tab1:
 
     search_term = st.text_input("Search catalog number or item name:").lower()
 
-    # Ensure strings for search
     df['cat_no.'] = df['cat_no.'].astype(str)
     df['item'] = df['item'].astype(str)
 
-    # Filter catalog numbers based on search in either cat_no. or item name
     filtered_cat_nos = sorted(
         df[df['cat_no.'].str.lower().str.contains(search_term) | df['item'].str.lower().str.contains(search_term)]['cat_no.'].unique()
     )
@@ -117,7 +114,7 @@ with tab1:
         total_qty = item_data['quantity'].sum() if not item_data.empty else 0
         st.metric(label=f"{item_name} (Cat#: {selected_cat})", value=total_qty)
 
-        initials = user_initials  # Use global initials input
+        initials = user_initials
 
         col1, col2 = st.columns(2)
         with col1:
@@ -133,7 +130,6 @@ with tab1:
             else:
                 timestamp = datetime.now()
 
-                # Add item
                 if add_qty > 0:
                     new_row = {
                         'item': item_name,
@@ -157,7 +153,6 @@ with tab1:
                         'expiration': expiration_date
                     }])], ignore_index=True)
 
-                # Remove quantity
                 if remove_qty > 0:
                     to_deduct = remove_qty
                     indices = df[df['cat_no.'] == selected_cat].sort_values(by='expiration').index
@@ -192,10 +187,10 @@ with tab1:
             st.session_state['rerun_needed'] = False
             st.experimental_rerun()
 
-        # Show history
         st.markdown("#### 🔁 Update History")
         history = log_df[log_df['cat_no.'] == selected_cat].sort_values(by='timestamp', ascending=False)
         st.dataframe(history, use_container_width=True)
+
 
 # ---- Tab 2: Item Locations with audit trail ----
 with tab2:
