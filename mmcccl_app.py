@@ -40,7 +40,7 @@ def load_data():
 # ---- Session State Init ----
 if 'df' not in st.session_state: st.session_state.df = load_data()
 if 'log' not in st.session_state:
-    st.session_state.log = pd.DataFrame(columns=['timestamp', 'cat_no.', 'action', 'quantity', 'initials', 'lot_number', 'expiration'])
+    st.session_state.log = pd.DataFrame(columns=['timestamp', 'cat_no.', 'action', 'quantity', 'initials', 'lot #', 'expiration'])
 if 'location_audit_log' not in st.session_state:
     st.session_state.location_audit_log = pd.DataFrame(columns=['timestamp', 'user', 'cat_no.', 'item', 'field', 'old_value', 'new_value'])
 if 'order_log' not in st.session_state:
@@ -90,7 +90,7 @@ with tab1:
             expiration_date_add = st.date_input("Expiration Date (Add)", key="expiration_date_add")
         with col2:
             remove_qty = st.number_input("Remove Quantity", min_value=0, step=1, key="remove_qty")
-            lot_number_remove = st.selectbox("Lot Number (Remove)", item_data['lot_number'].dropna().unique() if 'lot_number' in item_data else [])
+            lot_number_remove = st.selectbox("Lot Number (Remove)", item_data['lot #'].dropna().unique() if 'lot #' in item_data.columns else [])
             expiration_remove = st.selectbox("Expiration Date (Remove)", item_data['expiration'].dropna().unique())
 
         if st.button("Submit Update"):
@@ -103,18 +103,18 @@ with tab1:
                     'location': item_data['location'].iloc[0] if not item_data.empty else "",
                     'shelf': item_data['shelf'].iloc[0] if not item_data.empty else "",
                     'expiration': expiration_date_add,
-                    'lot_number': lot_number_add,
+                    'lot #': lot_number_add,
                     'ordered': False,
                     'order_date': pd.NaT
                 }
                 df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
                 log_df = pd.concat([log_df, pd.DataFrame([{
                     'timestamp': timestamp, 'cat_no.': selected_cat, 'action': 'Add',
-                    'quantity': add_qty, 'initials': user_initials, 'lot_number': lot_number_add, 'expiration': expiration_date_add
+                    'quantity': add_qty, 'initials': user_initials, 'lot #': lot_number_add, 'expiration': expiration_date_add
                 }])], ignore_index=True)
 
             if remove_qty > 0:
-                idx_match = df[(df['cat_no.'] == selected_cat) & (df['lot_number'] == lot_number_remove) & (df['expiration'] == expiration_remove)].index
+                idx_match = df[(df['cat_no.'] == selected_cat) & (df['lot #'] == lot_number_remove) & (df['expiration'] == expiration_remove)].index
                 for i in idx_match:
                     available = df.at[i, 'quantity']
                     if remove_qty >= available:
@@ -126,7 +126,7 @@ with tab1:
                 log_df = pd.concat([log_df, pd.DataFrame([{
                     'timestamp': timestamp, 'cat_no.': selected_cat, 'action': 'Remove',
                     'quantity': st.session_state.remove_qty if 'remove_qty' in st.session_state else 0,
-                    'initials': user_initials, 'lot_number': lot_number_remove, 'expiration': expiration_remove
+                    'initials': user_initials, 'lot #': lot_number_remove, 'expiration': expiration_remove
                 }])], ignore_index=True)
 
             df['quantity'] = pd.to_numeric(df['quantity'], errors='coerce').fillna(0).astype(int)
@@ -200,7 +200,7 @@ with tab4:
             st.session_state.location_audit_log.to_excel(writer, sheet_name='Location_Audit_Log', index=False)
             st.session_state.order_log.to_excel(writer, sheet_name='Order_Log', index=False)
         st.download_button(label="⬇️ Download Excel", data=output.getvalue(),
-                           file_name="MMCCCL_lab_inventory_export.xlsx",
-                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                          file_name="MMCCCL_lab_inventory_export.xlsx",
+                          mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     else:
         st.warning("No data to export.")
