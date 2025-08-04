@@ -77,151 +77,160 @@ tab1, tab2, tab3, tab4 = st.tabs([
 ])
 
 # ---- Tab 1 ----
-with tab1:
-    st.subheader("📊 Inventory Level & Tracker")
+import streamlit as st
+import pandas as pd
+from datetime import datetime
+import json
+import cv2
+import av
+from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
 
-    search_term = st.text_input("Search catalog number or item name:").lower()
+# Load and initialize data
+@st.cache_data
+def load_data():
+    df = pd.read_excel("MMCCCL_supply_july.xlsx")
+    df['expiration'] = pd.to_datetime(df['expiration'], errors='coerce')
+    return df
 
-    # Ensure strings for search
-    df['cat_no.'] = df['cat_no.'].astype(str)
-    df['item'] = df['item'].astype(str)
+df = load_data()
+log_df = pd.DataFrame(columns=['timestamp', 'cat_no.', 'action', 'quantity', 'initials', 'lot_number', 'expiration'])
 
-    # Filter catalog numbers based on search in either cat_no. or item name
-    filtered_cat_nos = sorted(
-        df[df['cat_no.'].str.lower().str.contains(search_term) | df['item'].str.lower().str.contains(search_term)]['cat_no.'].unique()
-    )
+st.set_page_config(page_title="MMCCCL Lab Supply Tracker", layout="wide")
+st.subheader("📊 Inventory Level & Tracker")
 
-    if not filtered_cat_nos:
-        st.warning("No catalog numbers or items found.")
-    else:
-        selected_cat = st.selectbox("Select Catalog Number", filtered_cat_nos)
-        item_data = df[df['cat_no.'] == selected_cat]
-        item_name = item_data['item'].values[0] if not item_data.empty else "N/A"
-        total_qty = item_data['quantity'].sum() if not item_data.empty else 0
-        st.metric(label=f"{item_name} (Cat#: {selected_cat})", value=total_qty)
+search_term = st.text_input("Search catalog number or item name:").lower()
 
-        initials = st.text_input("Your initials:")
+# Ensure search works
+df['cat_no.'] = df['cat_no.'].astype(str)
+df['item'] = df['item'].astype(str)
 
-        col1, col2 = st.columns(2)
-        with col1:
-            add_qty = st.number_input("Add Quantity", min_value=0, step=1, key="add_qty")
-            remove_qty = st.number_input("Remove Quantity", min_value=0, step=1, key="remove_qty")
-        with col2:
-            lot_number = st.text_input("Lot Number", key="lot_number")
-            expiration_date = st.date_input("Expiration Date", key="expiration_date")
+filtered_cat_nos = sorted(
+    df[df['cat_no.'].str.lower().str.contains(search_term) | df['item'].str.lower().str.contains(search_term)]['cat_no.'].unique()
+)
+
+if not filtered_cat_nos:
+    st.warning("No catalog numbers or items found.")
+else:
+    selected_cat = st.selectbox("Select Catalog Number", filtered_cat_nos)
+    item_data = df[df['cat_no.'] == selected_cat]
+    item_name = item_data['item'].values[0] if not item_data.empty else "N/A"
+    total_qty = item_data['quantity'].sum() if not item_data.empty else 0
+    st.metric(label=f"{item_name} (Cat#: {selected_cat})", value=total_qty)
+
+    initials = st.text_input("Your initials:")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        add_qty = st.number_input("Add Quantity", min_value=0, step=1, key="add_qty")
+        remove_qty = st.number_input("Remove Quantity", min_value=0, step=1, key="remove_qty")
+    with col2:
+        lot_number = st.text_input("Lot Number", key="lot_number")
+        expiration_date = st.date_input("Expiration Date", key="expiration_date")
+
+# --- QR CODE SCAN SECTION ---
 st.markdown("### 📷 Scan QR Code to Auto-Fill Fields")
 st.info("Ensure your QR contains JSON with keys: cat_no, action, quantity, initials, lot_number, expiration")
 
-# Placeholder session state for scanned data
-if "scanned_data" not in st.session_state:
-    st.session_state.scanned_data = {}
-
-class QRCodeProcessor(VideoTransformerBase):
+class QRProcessor(VideoTransformerBase):
     def __init__(self):
+        self.qr_detector = cv2.QRCodeDetector()
         self.result = {}
 
     def transform(self, frame):
         img = frame.to_ndarray(format="bgr24")
-        decoded_objs = decode(img)
-
-        for obj in decoded_objs:
+        data, bbox, _ = self.qr_detector.detectAndDecode(img)
+        if data:
             try:
-                self.result = json.loads(obj.data.decode('utf-8'))
+                self.result = json.loads(data)
             except json.JSONDecodeError:
-                self.result = {"error": "Invalid QR code data"}
+                self.result = {"error": "Invalid QR code format"}
         return img
 
-ctx = webrtc_streamer(key="qr", video_transformer_factory=QRCodeProcessor)
+ctx = webrtc_streamer(key="qr-stream", video_transformer_factory=QRProcessor)
 
+# QR Autofill Logic
 if ctx.video_transformer and ctx.video_transformer.result:
     scanned = ctx.video_transformer.result
     if "cat_no" in scanned:
-        st.success(f"Scanned QR: {scanned}")
-        st.session_state.scanned_data = scanned
-    else:
-        st.warning("QR code does not contain valid item data.")
-
-# Autofill fields from scanned data
-auto = st.session_state.scanned_data
-if auto:
-    if auto.get("cat_no") in filtered_cat_nos:
-        selected_cat = auto["cat_no"]
-        initials = auto.get("initials", "")
-        add_qty = int(auto["quantity"]) if auto.get("action") == "add" else 0
-        remove_qty = int(auto["quantity"]) if auto.get("action") == "remove" else 0
-        lot_number = auto.get("lot_number", "")
+        st.success(f"Scanned QR Data: {scanned}")
+        selected_cat = scanned.get("cat_no")
+        initials = scanned.get("initials", "")
+        add_qty = int(scanned["quantity"]) if scanned.get("action") == "add" else 0
+        remove_qty = int(scanned["quantity"]) if scanned.get("action") == "remove" else 0
+        lot_number = scanned.get("lot_number", "")
         try:
-            expiration_date = datetime.strptime(auto.get("expiration", ""), "%Y-%m-%d").date()
+            expiration_date = datetime.strptime(scanned.get("expiration", ""), "%Y-%m-%d").date()
         except:
             expiration_date = datetime.today().date()
     else:
-        st.error("Scanned catalog number not found in inventory.")
+        st.error("QR code missing 'cat_no' or invalid format.")
 
-        if st.button("Submit Update"):
-            if not initials:
-                st.error("Please enter your initials.")
-            else:
-                timestamp = datetime.now()
+# --- Submit Update ---
+if st.button("Submit Update"):
+    if not initials:
+        st.error("Please enter your initials.")
+    else:
+        timestamp = datetime.now()
 
-                # Add item
-                if add_qty > 0:
-                    new_row = {
-                        'item': item_name,
-                        'cat_no.': selected_cat,
-                        'quantity': add_qty,
-                        'location': item_data['location'].iloc[0] if not item_data.empty else "",
-                        'shelf': item_data['shelf'].iloc[0] if not item_data.empty else "",
-                        'expiration': expiration_date,
-                        'ordered': False,
-                        'order_date': pd.NaT
-                    }
-                    df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+        # Add quantity
+        if add_qty > 0:
+            new_row = {
+                'item': item_name,
+                'cat_no.': selected_cat,
+                'quantity': add_qty,
+                'location': item_data['location'].iloc[0] if not item_data.empty else "",
+                'shelf': item_data['shelf'].iloc[0] if not item_data.empty else "",
+                'expiration': expiration_date,
+                'ordered': False,
+                'order_date': pd.NaT
+            }
+            df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+            log_df = pd.concat([log_df, pd.DataFrame([{
+                'timestamp': timestamp,
+                'cat_no.': selected_cat,
+                'action': 'Add',
+                'quantity': add_qty,
+                'initials': initials,
+                'lot_number': lot_number,
+                'expiration': expiration_date
+            }])], ignore_index=True)
 
-                    log_df = pd.concat([log_df, pd.DataFrame([{
-                        'timestamp': timestamp,
-                        'cat_no.': selected_cat,
-                        'action': 'Add',
-                        'quantity': add_qty,
-                        'initials': initials,
-                        'lot_number': lot_number,
-                        'expiration': expiration_date
-                    }])], ignore_index=True)
+        # Remove quantity
+        if remove_qty > 0:
+            to_deduct = remove_qty
+            indices = df[df['cat_no.'] == selected_cat].sort_values(by='expiration').index
+            for i in indices:
+                if to_deduct <= 0:
+                    break
+                available = df.at[i, 'quantity']
+                if available <= to_deduct:
+                    to_deduct -= available
+                    df.at[i, 'quantity'] = 0
+                else:
+                    df.at[i, 'quantity'] -= to_deduct
+                    to_deduct = 0
 
-                # Remove quantity
-                if remove_qty > 0:
-                    to_deduct = remove_qty
-                    indices = df[df['cat_no.'] == selected_cat].sort_values(by='expiration').index
-                    for i in indices:
-                        if to_deduct <= 0:
-                            break
-                        available = df.at[i, 'quantity']
-                        if available <= to_deduct:
-                            to_deduct -= available
-                            df.at[i, 'quantity'] = 0
-                        else:
-                            df.at[i, 'quantity'] -= to_deduct
-                            to_deduct = 0
+            log_df = pd.concat([log_df, pd.DataFrame([{
+                'timestamp': timestamp,
+                'cat_no.': selected_cat,
+                'action': 'Remove',
+                'quantity': remove_qty,
+                'initials': initials,
+                'lot_number': lot_number,
+                'expiration': expiration_date
+            }])], ignore_index=True)
 
-                    log_df = pd.concat([log_df, pd.DataFrame([{
-                        'timestamp': timestamp,
-                        'cat_no.': selected_cat,
-                        'action': 'Remove',
-                        'quantity': remove_qty,
-                        'initials': initials,
-                        'lot_number': lot_number,
-                        'expiration': expiration_date
-                    }])], ignore_index=True)
+        df['quantity'] = pd.to_numeric(df['quantity'], errors='coerce').fillna(0).astype(int)
+        st.session_state.df = df[df['quantity'] > 0].copy()
+        st.session_state.log = log_df
+        st.success("Inventory updated successfully.")
+        st.rerun()
 
-                df['quantity'] = pd.to_numeric(df['quantity'], errors='coerce').fillna(0).astype(int)
-                st.session_state.df = df[df['quantity'] > 0].copy()
-                st.session_state.log = log_df
-                st.success("Inventory successfully updated.")
-                st.rerun()
+# --- History Section ---
+st.markdown("#### 🔁 Update History")
+history = log_df[log_df['cat_no.'] == selected_cat].sort_values(by='timestamp', ascending=False)
+st.dataframe(history, use_container_width=True)
 
-        # Show history
-        st.markdown("#### 🔁 Update History")
-        history = log_df[log_df['cat_no.'] == selected_cat].sort_values(by='timestamp', ascending=False)
-        st.dataframe(history, use_container_width=True)
 
 # ---- Tab 2: Item Locations ----
 with tab2:
