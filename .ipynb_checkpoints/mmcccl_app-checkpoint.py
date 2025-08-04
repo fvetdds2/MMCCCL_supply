@@ -142,27 +142,55 @@ with tab1:
 # ---- Tab 2 ----
 with tab2:
     st.subheader("📦 Item Locations")
-    editable_df = df[['item', 'cat_no.', 'location', 'shelf']].copy()
-    edited_table = st.data_editor(editable_df, use_container_width=True, num_rows="dynamic", key="editable_location",
-                                  column_config={"item": st.column_config.Column(disabled=True), "cat_no.": st.column_config.Column(disabled=True)})
+
+    # Use the DataFrame from the session state directly for editing
+    editable_df = st.session_state.df[['item', 'cat_no.', 'location', 'shelf']].copy()
+
+    edited_table = st.data_editor(
+        editable_df, 
+        use_container_width=True, 
+        num_rows="dynamic", 
+        key="editable_location",
+        column_config={"item": st.column_config.Column(disabled=True), "cat_no.": st.column_config.Column(disabled=True)}
+    )
+
     if st.button("💾 Save Changes"):
         changes_made, audit_entries = False, []
+
+        # Iterate over the edited table to detect and apply changes
         for idx, row in edited_table.iterrows():
-            cat, item = row['cat_no.'], row['item']
-            old_row = df[(df['cat_no.'] == cat) & (df['item'] == item)].iloc[0]
-            for field in ['location', 'shelf']:
-                if row[field] != old_row[field]:
-                    df.loc[(df['cat_no.'] == cat) & (df['item'] == item), field] = row[field]
-                    changes_made = True
-                    audit_entries.append({'timestamp': datetime.now(), 'user': user_initials, 'cat_no.': cat, 'item': item,
-                                          'field': field, 'old_value': old_row[field], 'new_value': row[field]})
+            cat = row['cat_no.']
+            item = row['item']
+            
+            # Find the corresponding original row in the session state DataFrame
+            original_rows = st.session_state.df[(st.session_state.df['cat_no.'] == cat) & (st.session_state.df['item'] == item)]
+            if not original_rows.empty:
+                original_row = original_rows.iloc[0]
+                
+                for field in ['location', 'shelf']:
+                    if str(row[field]) != str(original_row[field]):
+                        # Update the session state DataFrame with the new value
+                        st.session_state.df.loc[original_rows.index, field] = row[field]
+                        changes_made = True
+                        audit_entries.append({
+                            'timestamp': datetime.now(), 
+                            'user': user_initials, 
+                            'cat_no.': cat, 
+                            'item': item,
+                            'field': field, 
+                            'old_value': original_row[field], 
+                            'new_value': row[field]
+                        })
+
         if changes_made:
-            st.session_state.df = df
-            st.session_state.location_audit_log = pd.concat([audit_df, pd.DataFrame(audit_entries)], ignore_index=True)
+            # Update the location audit log
+            st.session_state.location_audit_log = pd.concat([st.session_state.location_audit_log, pd.DataFrame(audit_entries)], ignore_index=True)
             st.success("Changes saved successfully!")
+            st.rerun() # Rerun to refresh the page with the updated data
         else:
             st.info("No changes detected.")
-    st.dataframe(audit_df.sort_values(by="timestamp", ascending=False), use_container_width=True)
+
+    st.dataframe(st.session_state.location_audit_log.sort_values(by="timestamp", ascending=False), use_container_width=True)
 
 # ---- Tab 3 ----
 with tab3:
