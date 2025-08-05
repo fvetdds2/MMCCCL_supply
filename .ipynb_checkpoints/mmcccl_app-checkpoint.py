@@ -138,49 +138,45 @@ with tab1:
 
         st.markdown("#### 🔁 Update History")
         st.dataframe(st.session_state.log[st.session_state.log['cat_no.'] == selected_cat].sort_values(by='timestamp', ascending=False), use_container_width=True)
-
-# ---- Tab 2 ----
 with tab2:
     st.subheader("📦 Item Locations")
 
-    # Create a unique identifier for each row
-    editable_df_with_key = st.session_state.df.reset_index()
-    editable_df_with_key['key'] = editable_df_with_key['cat_no.'].astype(str) + '_' + editable_df_with_key['index'].astype(str)
+    # Make a copy for editing (but keep original index for mapping)
+    editable_df = st.session_state.df.copy()
+    editable_df.reset_index(inplace=True)  # keep original index as a column
+    editable_df.rename(columns={"index": "orig_index"}, inplace=True)
 
-    # Editable table
-    edited_table = st.data_editor(
-        editable_df_with_key[['key', 'item', 'cat_no.', 'location', 'shelf']],
+    # Let user edit location and shelf
+    edited_df = st.data_editor(
+        editable_df[["orig_index", "item", "cat_no.", "location", "shelf"]],
         use_container_width=True,
-        num_rows="dynamic",
-        key="editable_location",
+        hide_index=True,
         column_config={
-            "key": st.column_config.Column(disabled=True, width="small"),
+            "orig_index": st.column_config.Column(disabled=True, width="small"),
             "item": st.column_config.Column(disabled=True),
             "cat_no.": st.column_config.Column(disabled=True)
-        },
-        hide_index=True
+        }
     )
 
-    if st.button("💾 Save Changes"):
+    if st.button("💾 Save Location Changes"):
         changes_made, audit_entries = False, []
 
-        for idx, row in edited_table.iterrows():
-            key = row['key']
-            original_index = int(key.split('_')[1])
-            original_row = st.session_state.df.loc[original_index]
-
-            for field in ['location', 'shelf']:
-                if str(row[field]) != str(original_row[field]):
-                    st.session_state.df.loc[original_index, field] = row[field]
+        for _, row in edited_df.iterrows():
+            idx = row["orig_index"]  # original index from st.session_state.df
+            for field in ["location", "shelf"]:
+                old_value = st.session_state.df.at[idx, field]
+                new_value = row[field]
+                if str(old_value) != str(new_value):
+                    st.session_state.df.at[idx, field] = new_value
                     changes_made = True
                     audit_entries.append({
-                        'timestamp': datetime.now(),
-                        'user': user_initials,
-                        'cat_no.': original_row['cat_no.'],
-                        'item': original_row['item'],
-                        'field': field,
-                        'old_value': original_row[field],
-                        'new_value': row[field]
+                        "timestamp": datetime.now(),
+                        "user": user_initials,
+                        "cat_no.": st.session_state.df.at[idx, "cat_no."],
+                        "item": st.session_state.df.at[idx, "item"],
+                        "field": field,
+                        "old_value": old_value,
+                        "new_value": new_value
                     })
 
         if changes_made:
@@ -188,7 +184,7 @@ with tab2:
                 [st.session_state.location_audit_log, pd.DataFrame(audit_entries)],
                 ignore_index=True
             )
-            st.success("Changes saved successfully!")
+            st.success("✅ Location/Shelf changes saved.")
         else:
             st.info("No changes detected.")
 
@@ -199,16 +195,16 @@ with tab2:
         use_container_width=True
     )
 
-    # Download updated Excel
+    # Download updated inventory file
     if not st.session_state.df.empty:
         output_loc = io.BytesIO()
         with pd.ExcelWriter(output_loc, engine="openpyxl") as writer:
             st.session_state.df.to_excel(writer, sheet_name="Inventory", index=False)
             st.session_state.location_audit_log.to_excel(writer, sheet_name="Location_Audit_Log", index=False)
         st.download_button(
-            label="📥 Download Updated Locations (Excel)",
+            label="📥 Download Updated Inventory (Excel)",
             data=output_loc.getvalue(),
-            file_name="MMCCCL_updated_locations.xlsx",
+            file_name="MMCCCL_supply_updated_locations.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
