@@ -143,11 +143,11 @@ with tab1:
 with tab2:
     st.subheader("📦 Item Locations")
 
-    # Create a unique identifier for each row to ensure edits are tracked correctly
+    # Create a unique identifier for each row
     editable_df_with_key = st.session_state.df.reset_index()
     editable_df_with_key['key'] = editable_df_with_key['cat_no.'].astype(str) + '_' + editable_df_with_key['index'].astype(str)
 
-    # Use the data editor on a slice of the DataFrame that includes the unique key
+    # Editable table
     edited_table = st.data_editor(
         editable_df_with_key[['key', 'item', 'cat_no.', 'location', 'shelf']],
         use_container_width=True,
@@ -163,8 +163,7 @@ with tab2:
 
     if st.button("💾 Save Changes"):
         changes_made, audit_entries = False, []
-        
-        # Iterate over the edited table to detect and apply changes
+
         for idx, row in edited_table.iterrows():
             key = row['key']
             original_index = int(key.split('_')[1])
@@ -172,7 +171,6 @@ with tab2:
 
             for field in ['location', 'shelf']:
                 if str(row[field]) != str(original_row[field]):
-                    # Update the session state DataFrame with the new value
                     st.session_state.df.loc[original_index, field] = row[field]
                     changes_made = True
                     audit_entries.append({
@@ -184,16 +182,36 @@ with tab2:
                         'old_value': original_row[field],
                         'new_value': row[field]
                     })
-        
+
         if changes_made:
-            # Update the location audit log
-            st.session_state.location_audit_log = pd.concat([st.session_state.location_audit_log, pd.DataFrame(audit_entries)], ignore_index=True)
+            st.session_state.location_audit_log = pd.concat(
+                [st.session_state.location_audit_log, pd.DataFrame(audit_entries)],
+                ignore_index=True
+            )
             st.success("Changes saved successfully!")
-            st.rerun() # Rerun to refresh the page with the updated data
         else:
             st.info("No changes detected.")
 
-    st.dataframe(st.session_state.location_audit_log.sort_values(by="timestamp", ascending=False), use_container_width=True)
+    # Show audit log
+    st.markdown("### 📜 Location Change Audit Log")
+    st.dataframe(
+        st.session_state.location_audit_log.sort_values(by="timestamp", ascending=False),
+        use_container_width=True
+    )
+
+    # Download updated Excel
+    if not st.session_state.df.empty:
+        output_loc = io.BytesIO()
+        with pd.ExcelWriter(output_loc, engine="openpyxl") as writer:
+            st.session_state.df.to_excel(writer, sheet_name="Inventory", index=False)
+            st.session_state.location_audit_log.to_excel(writer, sheet_name="Location_Audit_Log", index=False)
+        st.download_button(
+            label="📥 Download Updated Locations (Excel)",
+            data=output_loc.getvalue(),
+            file_name="MMCCCL_updated_locations.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
 # ---- Tab 3 ----
 with tab3:
     st.subheader("⚠️ Items Needing Reorder")
