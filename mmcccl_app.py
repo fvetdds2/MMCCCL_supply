@@ -138,6 +138,7 @@ with tab1:
 
         st.markdown("#### 🔁 Update History")
         st.dataframe(st.session_state.log[st.session_state.log['cat_no.'] == selected_cat].sort_values(by='timestamp', ascending=False), use_container_width=True)
+
 with tab2:
     st.subheader("📦 Item Locations")
 
@@ -150,6 +151,10 @@ with tab2:
         ])
     if "user_initials" not in st.session_state:
         st.session_state.user_initials = st.text_input("Enter your initials:", "").upper()
+
+    # Force editable columns to be strings
+    st.session_state.df["location"] = st.session_state.df["location"].astype(str)
+    st.session_state.df["shelf"] = st.session_state.df["shelf"].astype(str)
 
     # Make editable copy with original index preserved
     editable_df = st.session_state.df.copy()
@@ -164,7 +169,9 @@ with tab2:
         column_config={
             "orig_index": st.column_config.Column(disabled=True, width="small"),
             "item": st.column_config.Column(disabled=True),
-            "cat_no.": st.column_config.Column(disabled=True)
+            "cat_no.": st.column_config.Column(disabled=True),
+            "location": st.column_config.Column(required=True),
+            "shelf": st.column_config.Column(required=True)
         }
     )
 
@@ -174,9 +181,9 @@ with tab2:
         for _, row in edited_df.iterrows():
             idx = row["orig_index"]
             for field in ["location", "shelf"]:
-                old_value = st.session_state.df.at[idx, field]
-                new_value = row[field]
-                if str(old_value) != str(new_value):
+                old_value = str(st.session_state.df.at[idx, field])
+                new_value = str(row[field])
+                if old_value != new_value:
                     st.session_state.df.at[idx, field] = new_value
                     changes_made = True
                     audit_entries.append({
