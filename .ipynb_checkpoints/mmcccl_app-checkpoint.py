@@ -228,29 +228,90 @@ with tab2:
 # ---- Tab 3 ----
 with tab3:
     st.subheader("⚠️ Items Needing Reorder")
-    today, two_months_from_now = datetime.now(), datetime.now() + pd.DateOffset(months=2)
+
+    # Ensure logs exist
+    if "order_log" not in st.session_state:
+        st.session_state.order_log = pd.DataFrame(columns=[
+            "timestamp", "user", "cat_no.", "item", "expiration", "order_unit", "quantity_order"
+        ])
+    if "user_initials" not in st.session_state:
+        st.session_state.user_initials = st.text_input("Enter your initials:", "").upper()
+
+    today = datetime.now()
+    two_months_from_now = today + pd.DateOffset(months=2)
+
     expired = df[df['expiration'].notna() & (df['expiration'] < today)]
     soon_expire = df[df['expiration'].notna() & (df['expiration'] >= today) & (df['expiration'] <= two_months_from_now)]
     reorder_items = pd.concat([expired, soon_expire]).drop_duplicates()
 
+    # Search bar
+    search_term = st.text_input("🔍 Search item or catalog no.").lower()
+    if search_term:
+        reorder_items = reorder_items[
+            reorder_items['item'].str.lower().str.contains(search_term) |
+            reorder_items['cat_no.'].str.lower().str.contains(search_term)
+        ]
+
+    # Add editable Order Qty column
+    reorder_items = reorder_items.copy()
+    reorder_items["Order Qty"] = 0  # default
+
     def highlight_rows(row):
-        if row['expiration'] < today: return ['background-color: lightblue'] * len(row)
-        elif row['expiration'] <= two_months_from_now: return ['background-color: lightcoral'] * len(row)
+        if row['expiration'] < today:
+            return ['background-color: lightblue'] * len(row)
+        elif row['expiration'] <= two_months_from_now:
+            return ['background-color: lightcoral'] * len(row)
         return [''] * len(row)
 
     if reorder_items.empty:
         st.success("🎉 No expired or soon-to-expire items!")
     else:
-        st.dataframe(reorder_items[['item', 'cat_no.', 'quantity', 'order_unit', 'expiration']].style.apply(highlight_rows, axis=1), use_container_width=True)
-        order_records = []
-        for idx, row in reorder_items.iterrows():
-            qty = st.number_input(f"Order qty for {row['item']} ({row['order_unit']})", min_value=0, step=1, key=f"order_qty_{idx}")
-            if qty > 0:
-                order_records.append({'timestamp': datetime.now(), 'user': user_initials, 'cat_no.': row['cat_no.'],
-                                      'item': row['item'], 'expiration': row['expiration'], 'order_unit': row['order_unit'], 'quantity_order': qty})
-        if st.button("✅ Save Order Log") and order_records:
-            st.session_state.order_log = pd.concat([st.session_state.order_log, pd.DataFrame(order_records)], ignore_index=True)
-            st.success("Order log saved!")
+        # Create editable order qty inputs
+        for idx in reorder_items.index:
+            reorder_items.at[idx, "Order Qty"] = st.number_input(
+                f"Order qty for {reorder_items.at[idx, 'item']} ({reorder_items.at[idx, 'order_unit']})",
+                min_value=0, step=1, key=f"order_qty_{idx}"
+            )
+
+        # Show table with highlight
+        st.dataframe(
+            reorder_items[['item', 'cat_no.', 'quantity', 'order_unit', 'expiration', 'Order Qty']]
+            .style.apply(highlight_rows, axis=1),
+            use_container_width=True
+        )
+
+        # Save order log
+        if st.button("✅ Save Order Log"):
+            order_records = []
+            for _, row in reorder_items.iterrows():
+                if row["Order Qty"] > 0:
+                    order_records.append({
+                        "timestamp": datetime.now(),
+                        "user": st.session_state.user_initials or "N/A",
+                        "cat_no.": row["cat_no."],
+                        "item": row["item"],
+                        "expiration": row["expiration"],
+                        "order_unit": row["order_unit"],
+                        "quantity_order": row["Order Qty"]
+                    })
+
+            if order_records:
+                st.session_state.order_log = pd.concat(
+                    [st.session_state.order_log, pd.DataFrame(order_records)],
+                    ignore_index=True
+                )
+                st.success("Order log saved!")
+            else:
+                st.info("No order quantities entered.")
+
+    # Show saved orders
+    if not st.session_state.order_log.empty:
+        st.markdown("### 📜 Order Log")
+        st.dataframe(
+            st.session_state.order_log.sort_values(by="timestamp", ascending=False),
+            use_container_width=True
+        )
+
 
 # ---- Tab 4 ----
 with tab4:
