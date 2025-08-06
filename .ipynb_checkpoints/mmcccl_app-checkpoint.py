@@ -141,7 +141,17 @@ with tab1:
 with tab2:
     st.subheader("📦 Item Locations")
 
-    # Make a copy for editing (but keep original index for mapping)
+    # Ensure session state variables exist
+    if "df" not in st.session_state:
+        st.session_state.df = pd.DataFrame(columns=["item", "cat_no.", "location", "shelf"])
+    if "location_audit_log" not in st.session_state:
+        st.session_state.location_audit_log = pd.DataFrame(columns=[
+            "timestamp", "user", "cat_no.", "item", "field", "old_value", "new_value"
+        ])
+    if "user_initials" not in st.session_state:
+        st.session_state.user_initials = st.text_input("Enter your initials:", "").upper()
+
+    # Make editable copy with original index preserved
     editable_df = st.session_state.df.copy()
     editable_df.reset_index(inplace=True)  # keep original index as a column
     editable_df.rename(columns={"index": "orig_index"}, inplace=True)
@@ -162,7 +172,7 @@ with tab2:
         changes_made, audit_entries = False, []
 
         for _, row in edited_df.iterrows():
-            idx = row["orig_index"]  # original index from st.session_state.df
+            idx = row["orig_index"]
             for field in ["location", "shelf"]:
                 old_value = st.session_state.df.at[idx, field]
                 new_value = row[field]
@@ -171,7 +181,7 @@ with tab2:
                     changes_made = True
                     audit_entries.append({
                         "timestamp": datetime.now(),
-                        "user": user_initials,
+                        "user": st.session_state.user_initials or "N/A",
                         "cat_no.": st.session_state.df.at[idx, "cat_no."],
                         "item": st.session_state.df.at[idx, "item"],
                         "field": field,
@@ -195,7 +205,7 @@ with tab2:
         use_container_width=True
     )
 
-    # Download updated inventory file
+    # Download updated inventory + audit log
     if not st.session_state.df.empty:
         output_loc = io.BytesIO()
         with pd.ExcelWriter(output_loc, engine="openpyxl") as writer:
