@@ -227,8 +227,34 @@ with tab2:
 
 # ---- Tab 3 ----
 
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+
+# ---- Tab 3 ----
 with tab3:
     st.subheader("⚠️ Items Needing Reorder")
+
+    # Config: email sender info
+    EMAIL_SENDER = "your_email@example.com"
+    EMAIL_PASSWORD = "your_password"  # For Gmail, use App Password
+    EMAIL_RECIPIENTS = ["recipient1@example.com", "recipient2@example.com"]
+
+    def send_email_alert(subject, body, recipients):
+        msg = MIMEMultipart()
+        msg['From'] = EMAIL_SENDER
+        msg['To'] = ", ".join(recipients)
+        msg['Subject'] = subject
+
+        msg.attach(MIMEText(body, 'plain'))
+
+        try:
+            with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+                server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+                server.sendmail(EMAIL_SENDER, recipients, msg.as_string())
+            st.info("📧 Email alert sent successfully!")
+        except Exception as e:
+            st.error(f"❌ Failed to send email: {e}")
 
     # Ensure logs exist
     if "order_log" not in st.session_state:
@@ -245,6 +271,20 @@ with tab3:
     soon_expire = df[df['expiration'].notna() & (df['expiration'] >= today) & (df['expiration'] <= two_months_from_now)]
     reorder_items = pd.concat([expired, soon_expire]).drop_duplicates()
 
+    # Alert banners
+    expired_count = expired.shape[0]
+    soon_count = soon_expire.shape[0]
+
+    if expired_count > 0:
+        st.error(f"🚨 {expired_count} items have EXPIRED! Please remove or exchange them immediately.")
+    if soon_count > 0:
+        st.warning(f"⚠️ {soon_count} items will expire within 2 months. Consider reordering soon.")
+
+    # Auto email alert when expired items exist
+    if expired_count > 0:
+        email_body = "The following items have expired:\n\n" + expired[['item', 'cat_no.', 'expiration']].to_string(index=False)
+        send_email_alert("🚨 Expired Inventory Alert", email_body, EMAIL_RECIPIENTS)
+
     # Search bar
     search_term = st.text_input("🔍 Search item or catalog no.").lower()
     if search_term:
@@ -256,23 +296,37 @@ with tab3:
     if reorder_items.empty:
         st.success("🎉 No expired or soon-to-expire items!")
     else:
-        # Add "Order Qty" column if missing
+        # Add Order Qty column if missing
         if "Order Qty" not in reorder_items.columns:
             reorder_items["Order Qty"] = 0
 
-        # Create style mapping for background colors
-        bg_colors = []
-        for _, row in reorder_items.iterrows():
-            if row['expiration'] < today:
-                bg_colors.append(["background-color: lightblue"] * len(reorder_items.columns))
-            elif row['expiration'] <= two_months_from_now:
-                bg_colors.append(["background-color: lightcoral"] * len(reorder_items.columns))
-            else:
-                bg_colors.append([""] * len(reorder_items.columns))
+        # Add status column for coloring
+        reorder_items["status_color"] = ""
+        reorder_items.loc[reorder_items['expiration'] < today, "status_color"] = "lightblue"
+        reorder_items.loc[
+            (reorder_items['expiration'] >= today) &
+            (reorder_items['expiration'] <= two_months_from_now),
+            "status_color"
+        ] = "lightcoral"
 
-        # Convert to editable table
+        # Inject CSS for row coloring in st.data_editor
+        st.markdown("""
+            <style>
+            [data-testid="stDataEditorRow"] div[data-testid="stDataEditorCell"]:has(input) {
+                background-color: inherit !important;
+            }
+            [data-testid="stDataEditorRow"][style*="lightblue"] {
+                background-color: lightblue !important;
+            }
+            [data-testid="stDataEditorRow"][style*="lightcoral"] {
+                background-color: lightcoral !important;
+            }
+            </style>
+        """, unsafe_allow_html=True)
+
+        # Editable table
         edited_df = st.data_editor(
-            reorder_items[['item', 'cat_no.', 'quantity', 'order_unit', 'expiration', 'Order Qty']],
+            reorder_items[['item', 'cat_no.', 'quantity', 'order_unit', 'expiration', 'Order Qty', 'status_color']],
             use_container_width=True,
             hide_index=True,
             column_config={
@@ -281,12 +335,13 @@ with tab3:
                 "quantity": st.column_config.Column(disabled=True),
                 "order_unit": st.column_config.Column(disabled=True),
                 "expiration": st.column_config.Column(disabled=True),
-                "Order Qty": st.column_config.NumberColumn(min_value=0, step=1)
+                "Order Qty": st.column_config.NumberColumn(min_value=0, step=1),
+                "status_color": st.column_config.Column(disabled=True)
             },
             key="order_qty_editor"
         )
 
-        # Save changes to order log
+        # Save order log
         if st.button("✅ Save Order Log"):
             order_records = []
             for _, row in edited_df.iterrows():
@@ -316,7 +371,6 @@ with tab3:
             st.session_state.order_log.sort_values(by="timestamp", ascending=False),
             use_container_width=True
         )
-
 
 # ---- Tab 4 ----
 with tab4:
