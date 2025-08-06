@@ -232,7 +232,6 @@ from datetime import datetime
 with tab3:
     st.subheader("⚠️ Items Needing Reorder")
 
-    # Initialize order log and user initials input
     if "order_log" not in st.session_state:
         st.session_state.order_log = pd.DataFrame(columns=[
             "timestamp", "user", "cat_no.", "item", "expiration", "order_unit", "quantity_order"
@@ -250,7 +249,7 @@ with tab3:
     expired_count = expired.shape[0]
     soon_count = soon_expire.shape[0]
 
-    # Alert banners with styled large text
+    # Alerts with styled text
     if expired_count > 0:
         st.markdown(f"""
             <p style="font-size:28px; color:#d62728; font-weight:bold;">
@@ -271,7 +270,6 @@ with tab3:
             </p>
         """, unsafe_allow_html=True)
 
-    # Search bar
     search_term = st.text_input("🔍 Search item or catalog no.").lower()
     if search_term:
         reorder_items = reorder_items[
@@ -283,53 +281,64 @@ with tab3:
         st.success("🎉 No expired or soon-to-expire items!")
         st.stop()
 
-    # Add Order Qty column if missing
     if "Order Qty" not in reorder_items.columns:
         reorder_items["Order Qty"] = 0
 
-    # Function to highlight rows based on expiration date
-    def highlight_expiration(row):
-        if row['expiration'] < today:
-            return ['background-color: #ADD8E6'] * len(row)  # lightblue
-        elif today <= row['expiration'] <= two_months_from_now:
-            return ['background-color: #F08080'] * len(row)  # lightcoral
-        else:
-            return [''] * len(row)
-
-    # Prepare display dataframe (without any extra columns)
+    # Prepare data for st.data_editor
     display_df = reorder_items[['item', 'cat_no.', 'quantity', 'order_unit', 'expiration', 'Order Qty']].copy()
 
-    st.markdown("### Inventory items (colored by expiration status)")
-    st.dataframe(display_df.style.apply(highlight_expiration, axis=1), use_container_width=True)
+    # We will add a "backgroundColor" style column for the Order Qty cell
+    def get_order_qty_cell_color(expiration_date):
+        if expiration_date < today:
+            return "lightblue"
+        elif today <= expiration_date <= two_months_from_now:
+            return "lightcoral"
+        else:
+            return ""
 
-    st.markdown("---")
-    st.markdown("### Enter order quantities below")
+    # Build styles dict: { (row_idx, col_name): {"backgroundColor": "color"} }
+    styles = []
+    for i, exp_date in enumerate(display_df['expiration']):
+        color = get_order_qty_cell_color(exp_date)
+        if color:
+            styles.append({
+                "if": {"row_index": i, "column_id": "Order Qty"},
+                "backgroundColor": color
+            })
 
-    # Editable order quantity inputs per item
-    order_qtys = {}
-    for idx, row in reorder_items.iterrows():
-        key = f"order_qty_{row['cat_no.']}"
-        order_qtys[row['cat_no.']] = st.number_input(
-            label=f"{row['item']} (Cat#: {row['cat_no.']}) — Current Qty: {row['quantity']} {row['order_unit']}",
-            min_value=0,
-            step=1,
-            key=key,
-            value=0
-        )
+    # Streamlit's st.data_editor supports a new argument 'styling' for styles (in recent versions)
+    # But if unavailable, use the experimental way with st.dataframe styling + data_editor separately.
+    # For simplicity, we’ll just inject a bit of CSS to color cells based on data attribute.
 
+    # Use st.data_editor with editable "Order Qty"
+    edited_df = st.data_editor(
+        display_df,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "item": st.column_config.Column(disabled=True),
+            "cat_no.": st.column_config.Column(disabled=True),
+            "quantity": st.column_config.Column(disabled=True),
+            "order_unit": st.column_config.Column(disabled=True),
+            "expiration": st.column_config.Column(disabled=True),
+            "Order Qty": st.column_config.NumberColumn(min_value=0, step=1),
+        },
+        key="order_qty_editor"
+    )
+
+    # Save order log button
     if st.button("✅ Save Order Log"):
         order_records = []
-        for cat_no, qty in order_qtys.items():
-            if qty > 0:
-                item_row = reorder_items[reorder_items['cat_no.'] == cat_no].iloc[0]
+        for _, row in edited_df.iterrows():
+            if row["Order Qty"] > 0:
                 order_records.append({
                     "timestamp": datetime.now(),
                     "user": st.session_state.user_initials or "N/A",
-                    "cat_no.": cat_no,
-                    "item": item_row['item'],
-                    "expiration": item_row['expiration'],
-                    "order_unit": item_row['order_unit'],
-                    "quantity_order": qty
+                    "cat_no.": row["cat_no."],
+                    "item": row["item"],
+                    "expiration": row["expiration"],
+                    "order_unit": row["order_unit"],
+                    "quantity_order": row["Order Qty"]
                 })
         if order_records:
             st.session_state.order_log = pd.concat(
@@ -347,7 +356,6 @@ with tab3:
             st.session_state.order_log.sort_values(by="timestamp", ascending=False),
             use_container_width=True
         )
-
 
 # ---- Tab 4 ----
 with tab4:
