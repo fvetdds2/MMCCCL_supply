@@ -226,6 +226,7 @@ with tab2:
         )
 
 # ---- Tab 3 ----
+
 with tab3:
     st.subheader("⚠️ Items Needing Reorder")
 
@@ -252,38 +253,43 @@ with tab3:
             reorder_items['cat_no.'].str.lower().str.contains(search_term)
         ]
 
-    # Add editable Order Qty column
-    reorder_items = reorder_items.copy()
-    reorder_items["Order Qty"] = 0  # default
-
-    def highlight_rows(row):
-        if row['expiration'] < today:
-            return ['background-color: lightblue'] * len(row)
-        elif row['expiration'] <= two_months_from_now:
-            return ['background-color: lightcoral'] * len(row)
-        return [''] * len(row)
-
     if reorder_items.empty:
         st.success("🎉 No expired or soon-to-expire items!")
     else:
-        # Create editable order qty inputs
-        for idx in reorder_items.index:
-            reorder_items.at[idx, "Order Qty"] = st.number_input(
-                f"Order qty for {reorder_items.at[idx, 'item']} ({reorder_items.at[idx, 'order_unit']})",
-                min_value=0, step=1, key=f"order_qty_{idx}"
-            )
+        # Add "Order Qty" column if missing
+        if "Order Qty" not in reorder_items.columns:
+            reorder_items["Order Qty"] = 0
 
-        # Show table with highlight
-        st.dataframe(
-            reorder_items[['item', 'cat_no.', 'quantity', 'order_unit', 'expiration', 'Order Qty']]
-            .style.apply(highlight_rows, axis=1),
-            use_container_width=True
+        # Create style mapping for background colors
+        bg_colors = []
+        for _, row in reorder_items.iterrows():
+            if row['expiration'] < today:
+                bg_colors.append(["background-color: lightblue"] * len(reorder_items.columns))
+            elif row['expiration'] <= two_months_from_now:
+                bg_colors.append(["background-color: lightcoral"] * len(reorder_items.columns))
+            else:
+                bg_colors.append([""] * len(reorder_items.columns))
+
+        # Convert to editable table
+        edited_df = st.data_editor(
+            reorder_items[['item', 'cat_no.', 'quantity', 'order_unit', 'expiration', 'Order Qty']],
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "item": st.column_config.Column(disabled=True),
+                "cat_no.": st.column_config.Column(disabled=True),
+                "quantity": st.column_config.Column(disabled=True),
+                "order_unit": st.column_config.Column(disabled=True),
+                "expiration": st.column_config.Column(disabled=True),
+                "Order Qty": st.column_config.NumberColumn(min_value=0, step=1)
+            },
+            key="order_qty_editor"
         )
 
-        # Save order log
+        # Save changes to order log
         if st.button("✅ Save Order Log"):
             order_records = []
-            for _, row in reorder_items.iterrows():
+            for _, row in edited_df.iterrows():
                 if row["Order Qty"] > 0:
                     order_records.append({
                         "timestamp": datetime.now(),
@@ -294,7 +300,6 @@ with tab3:
                         "order_unit": row["order_unit"],
                         "quantity_order": row["Order Qty"]
                     })
-
             if order_records:
                 st.session_state.order_log = pd.concat(
                     [st.session_state.order_log, pd.DataFrame(order_records)],
