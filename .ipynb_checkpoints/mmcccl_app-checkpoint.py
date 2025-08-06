@@ -225,38 +225,14 @@ with tab2:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
-# ---- Tab 3 ----
+import streamlit as st
+import pandas as pd
+from datetime import datetime
 
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-
-# ---- Tab 3 ----
 with tab3:
     st.subheader("⚠️ Items Needing Reorder")
 
-    # Config: email sender info
-    EMAIL_SENDER = "your_email@example.com"
-    EMAIL_PASSWORD = "your_password"  # For Gmail, use App Password
-    EMAIL_RECIPIENTS = ["recipient1@example.com", "recipient2@example.com"]
-
-    def send_email_alert(subject, body, recipients):
-        msg = MIMEMultipart()
-        msg['From'] = EMAIL_SENDER
-        msg['To'] = ", ".join(recipients)
-        msg['Subject'] = subject
-
-        msg.attach(MIMEText(body, 'plain'))
-
-        try:
-            with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
-                server.login(EMAIL_SENDER, EMAIL_PASSWORD)
-                server.sendmail(EMAIL_SENDER, recipients, msg.as_string())
-            st.info("📧 Email alert sent successfully!")
-        except Exception as e:
-            st.error(f"❌ Failed to send email: {e}")
-
-    # Ensure logs exist
+    # Initialize order log and user initials input
     if "order_log" not in st.session_state:
         st.session_state.order_log = pd.DataFrame(columns=[
             "timestamp", "user", "cat_no.", "item", "expiration", "order_unit", "quantity_order"
@@ -271,19 +247,29 @@ with tab3:
     soon_expire = df[df['expiration'].notna() & (df['expiration'] >= today) & (df['expiration'] <= two_months_from_now)]
     reorder_items = pd.concat([expired, soon_expire]).drop_duplicates()
 
-    # Alert banners
     expired_count = expired.shape[0]
     soon_count = soon_expire.shape[0]
 
+    # Alert banners with styled large text
     if expired_count > 0:
-        st.error(f"🚨 {expired_count} items have EXPIRED! Please remove or exchange them immediately.")
-    if soon_count > 0:
-        st.warning(f"⚠️ {soon_count} items will expire within 2 months. Consider reordering soon.")
+        st.markdown(f"""
+            <p style="font-size:28px; color:#d62728; font-weight:bold;">
+                🚨 {expired_count} item{'s' if expired_count > 1 else ''} have EXPIRED!
+            </p>
+            <p style="font-size:18px; color:#d62728;">
+                Please remove or exchange them immediately.
+            </p>
+        """, unsafe_allow_html=True)
 
-    # Auto email alert when expired items exist
-    if expired_count > 0:
-        email_body = "The following items have expired:\n\n" + expired[['item', 'cat_no.', 'expiration']].to_string(index=False)
-        send_email_alert("🚨 Expired Inventory Alert", email_body, EMAIL_RECIPIENTS)
+    if soon_count > 0:
+        st.markdown(f"""
+            <p style="font-size:22px; color:#ff7f0e; font-weight:bold;">
+                ⚠️ {soon_count} item{'s' if soon_count > 1 else ''} will expire within 2 months.
+            </p>
+            <p style="font-size:16px; color:#ff7f0e;">
+                Consider reordering soon.
+            </p>
+        """, unsafe_allow_html=True)
 
     # Search bar
     search_term = st.text_input("🔍 Search item or catalog no.").lower()
@@ -295,74 +281,64 @@ with tab3:
 
     if reorder_items.empty:
         st.success("🎉 No expired or soon-to-expire items!")
-    else:
-        # Add Order Qty column if missing
-        if "Order Qty" not in reorder_items.columns:
-            reorder_items["Order Qty"] = 0
+        st.stop()
 
-        # Add status column for coloring
-        reorder_items["status_color"] = ""
-        reorder_items.loc[reorder_items['expiration'] < today, "status_color"] = "lightblue"
-        reorder_items.loc[
-            (reorder_items['expiration'] >= today) &
-            (reorder_items['expiration'] <= two_months_from_now),
-            "status_color"
-        ] = "lightcoral"
+    # Add Order Qty column if missing
+    if "Order Qty" not in reorder_items.columns:
+        reorder_items["Order Qty"] = 0
 
-        # Inject CSS for row coloring in st.data_editor
-        st.markdown("""
-            <style>
-            [data-testid="stDataEditorRow"] div[data-testid="stDataEditorCell"]:has(input) {
-                background-color: inherit !important;
-            }
-            [data-testid="stDataEditorRow"][style*="lightblue"] {
-                background-color: lightblue !important;
-            }
-            [data-testid="stDataEditorRow"][style*="lightcoral"] {
-                background-color: lightcoral !important;
-            }
-            </style>
-        """, unsafe_allow_html=True)
+    # Function to highlight rows based on expiration date
+    def highlight_expiration(row):
+        if row['expiration'] < today:
+            return ['background-color: #ADD8E6'] * len(row)  # lightblue
+        elif today <= row['expiration'] <= two_months_from_now:
+            return ['background-color: #F08080'] * len(row)  # lightcoral
+        else:
+            return [''] * len(row)
 
-        # Editable table
-        edited_df = st.data_editor(
-            reorder_items[['item', 'cat_no.', 'quantity', 'order_unit', 'expiration', 'Order Qty', 'status_color']],
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "item": st.column_config.Column(disabled=True),
-                "cat_no.": st.column_config.Column(disabled=True),
-                "quantity": st.column_config.Column(disabled=True),
-                "order_unit": st.column_config.Column(disabled=True),
-                "expiration": st.column_config.Column(disabled=True),
-                "Order Qty": st.column_config.NumberColumn(min_value=0, step=1),
-                "status_color": st.column_config.Column(disabled=True)
-            },
-            key="order_qty_editor"
+    # Prepare display dataframe (without any extra columns)
+    display_df = reorder_items[['item', 'cat_no.', 'quantity', 'order_unit', 'expiration', 'Order Qty']].copy()
+
+    st.markdown("### Inventory items (colored by expiration status)")
+    st.dataframe(display_df.style.apply(highlight_expiration, axis=1), use_container_width=True)
+
+    st.markdown("---")
+    st.markdown("### Enter order quantities below")
+
+    # Editable order quantity inputs per item
+    order_qtys = {}
+    for idx, row in reorder_items.iterrows():
+        key = f"order_qty_{row['cat_no.']}"
+        order_qtys[row['cat_no.']] = st.number_input(
+            label=f"{row['item']} (Cat#: {row['cat_no.']}) — Current Qty: {row['quantity']} {row['order_unit']}",
+            min_value=0,
+            step=1,
+            key=key,
+            value=0
         )
 
-        # Save order log
-        if st.button("✅ Save Order Log"):
-            order_records = []
-            for _, row in edited_df.iterrows():
-                if row["Order Qty"] > 0:
-                    order_records.append({
-                        "timestamp": datetime.now(),
-                        "user": st.session_state.user_initials or "N/A",
-                        "cat_no.": row["cat_no."],
-                        "item": row["item"],
-                        "expiration": row["expiration"],
-                        "order_unit": row["order_unit"],
-                        "quantity_order": row["Order Qty"]
-                    })
-            if order_records:
-                st.session_state.order_log = pd.concat(
-                    [st.session_state.order_log, pd.DataFrame(order_records)],
-                    ignore_index=True
-                )
-                st.success("Order log saved!")
-            else:
-                st.info("No order quantities entered.")
+    if st.button("✅ Save Order Log"):
+        order_records = []
+        for cat_no, qty in order_qtys.items():
+            if qty > 0:
+                item_row = reorder_items[reorder_items['cat_no.'] == cat_no].iloc[0]
+                order_records.append({
+                    "timestamp": datetime.now(),
+                    "user": st.session_state.user_initials or "N/A",
+                    "cat_no.": cat_no,
+                    "item": item_row['item'],
+                    "expiration": item_row['expiration'],
+                    "order_unit": item_row['order_unit'],
+                    "quantity_order": qty
+                })
+        if order_records:
+            st.session_state.order_log = pd.concat(
+                [st.session_state.order_log, pd.DataFrame(order_records)],
+                ignore_index=True
+            )
+            st.success("Order log saved!")
+        else:
+            st.info("No order quantities entered.")
 
     # Show saved orders
     if not st.session_state.order_log.empty:
@@ -371,6 +347,7 @@ with tab3:
             st.session_state.order_log.sort_values(by="timestamp", ascending=False),
             use_container_width=True
         )
+
 
 # ---- Tab 4 ----
 with tab4:
