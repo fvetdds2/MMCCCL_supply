@@ -256,34 +256,33 @@ with tab3:
     # --- Alerts ---
     if expired_count > 0:
         st.markdown(f"""
-            <p style="font-size:28px; color:#D3D3D3; font-weight:bold;">
-                🚨 {expired_count} item{'s' if expired_count > 1 else ''} have EXPIRED!
+            <p style="font-size:28px; color:#696969; font-weight:bold;">
+                🚨 {expired_count} item{'s' if expired_count > 1 else ''} have EXPIRED! (gray highlight in the table)
             </p>
-            <p style="font-size:18px; color:#d62728;">
+            <p style="font-size:18px; color:#696969;">
                 Please remove or exchange them immediately.
             </p>
         """, unsafe_allow_html=True)
-
-    if soon_count > 0:
-        st.markdown(f"""
-            <p style="font-size:22px; color:#008000; font-weight:bold;">
-                ⚠️ {soon_count} item{'s' if soon_count > 1 else ''} will expire within 2 months.
-            </p>
-            <p style="font-size:16px; color:#ff7f0e;">
-                Consider reordering soon.
-            </p>
-        """, unsafe_allow_html=True)
-
     if urgent_count > 0:
         st.markdown(f"""
             <p style="font-size:26px; color:#b30000; font-weight:bold;">
-                🔴 URGENT: {urgent_count} item{'s' if urgent_count > 1 else ''} are at or below minimum stock level!
+                🔴 URGENT: {urgent_count} item{'s' if urgent_count > 1 else ''} are at or below minimum stock level! (orange highlight in the table)
             </p>
             <p style="font-size:16px; color:#b30000;">
                 Reorder immediately to avoid supply shortages.
             </p>
         """, unsafe_allow_html=True)
+    if soon_count > 0:
+        st.markdown(f"""
+            <p style="font-size:22px; color:#008000; font-weight:bold;">
+                ⚠️ {soon_count} item{'s' if soon_count > 1 else ''} will expire within 2 months. (green highlight in the table)
+            </p>
+            <p style="font-size:16px; color:#008000;">
+                Consider reordering soon.
+            </p>
+        """, unsafe_allow_html=True)
 
+    
     # --- Combine All Items to Show ---
     reorder_items = pd.concat([expired, soon_expire, urgent_reorder]).drop_duplicates()
 
@@ -304,11 +303,11 @@ with tab3:
     # Highlighting function
     def highlight_row(row):
         if row["quantity"] <= row["minimum_stock_level"]:
-            return ['background-color: lightpink'] * len(row)
-        elif pd.notna(row["expiration"]) and row["expiration"] < today:
-            return ['background-color: lightblue'] * len(row)
-        elif pd.notna(row["expiration"]) and today <= row["expiration"] <= two_months_from_now:
             return ['background-color: lightcoral'] * len(row)
+        elif pd.notna(row["expiration"]) and row["expiration"] < today:
+            return ['background-color: lightgray'] * len(row)
+        elif pd.notna(row["expiration"]) and today <= row["expiration"] <= two_months_from_now:
+            return ['background-color: lightgreen'] * len(row)
         else:
             return [''] * len(row)
 
