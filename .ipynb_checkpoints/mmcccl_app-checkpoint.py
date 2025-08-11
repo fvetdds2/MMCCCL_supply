@@ -59,10 +59,10 @@ audit_df = st.session_state.location_audit_log
 
 # ---- Tabs ----
 tab1, tab2, tab3, tab4 = st.tabs([
-    "📊 Inventory + Update Log",
-    "📦 Item Locations",
+    "📊 Add or Remove items in the inventory + Update Log",
+    "📦 Editable Item Locations",
     "⏰ Needed to order & Expired & Expiring in 60 Days",
-    "📁 Export Data"
+    "📁 Export Data into excel file"
 ])
 
 # ---- Tab 1 ----
