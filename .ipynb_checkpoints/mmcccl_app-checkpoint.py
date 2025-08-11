@@ -233,138 +233,61 @@ with tab2:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
+# ---- Tab 3 ----
 with tab3:
-    st.subheader("⚠️ Items Needing Reorder")
-    
-    # Initialize session state for order log if it doesn't exist
-    if "order_log" not in st.session_state:
-        st.session_state.order_log = pd.DataFrame(columns=[
-            "timestamp", "user", "cat_no.", "item", "expiration", "order_unit", "quantity_order"
-        ])
-    
-    # --- Stock Level Alert ---
-    # Group by cat_no. to get total quantity and minimum stock level
-    df_grouped = df.groupby('cat_no.').agg(
-        total_quantity=('quantity', 'sum'),
-        item=('item', 'first'),
-        minimum_stock_level=('minimum_stock_level', 'first')
-    ).reset_index()
+    st.subheader("Inventory Alerts & Expiration Tracking")
 
-    # Filter for items below or at minimum stock level
-    low_stock_items = df_grouped[df_grouped['total_quantity'] <= df_grouped['minimum_stock_level']].copy()
-    low_stock_count = low_stock_items.shape[0]
+    # Ensure 'expiration' is datetime
+    df['expiration'] = pd.to_datetime(df['expiration'], errors='coerce')
 
-    if low_stock_count > 0:
-        st.markdown(f"""
-            <p style="font-size:28px; color:#d62728; font-weight:bold;">
-                📉 {low_stock_count} item{'s' if low_stock_count > 1 else ''} have reached their minimum stock level!
-            </p>
-            <p style="font-size:18px; color:#d62728;">
-                These items are in urgent need of reordering.
-            </p>
-        """, unsafe_allow_html=True)
-        
-        st.markdown("#### Low Stock Items")
-        st.dataframe(low_stock_items, use_container_width=True)
+    # Get today's date
+    today = pd.Timestamp.today()
 
-    # --- Expiration Alerts ---
-    today = datetime.now()
-    two_months_from_now = today + pd.DateOffset(months=2)
+    # Identify expired and near-expired items
+    expired_items = df[df['expiration'] < today]
+    near_expired_items = df[
+        (df['expiration'] >= today) & 
+        (df['expiration'] <= today + pd.DateOffset(months=2))
+    ]
 
-    expired = df[df['expiration'].notna() & (df['expiration'] < today)]
-    soon_expire = df[df['expiration'].notna() & (df['expiration'] >= today) & (df['expiration'] <= two_months_from_now)]
-    reorder_items_exp = pd.concat([expired, soon_expire]).drop_duplicates()
+    # Identify low-stock items
+    low_stock_items = df[df['quantity'] <= df['minimum_stock_level']]
 
-    expired_count = expired.shape[0]
-    soon_count = soon_expire.shape[0]
+    # Alert banners
+    if not expired_items.empty:
+        st.error(f"🚨 {len(expired_items)} expired item(s) found! Please remove or replace them.")
 
-    if expired_count > 0:
-        st.markdown(f"""
-            <p style="font-size:28px; color:#d62728; font-weight:bold;">
-                🚨 {expired_count} item{'s' if expired_count > 1 else ''} have EXPIRED!
-            </p>
-            <p style="font-size:18px; color:#d62728;">
-                Please remove or exchange them immediately.
-            </p>
-        """, unsafe_allow_html=True)
+    if not near_expired_items.empty:
+        st.warning(f"⚠️ {len(near_expired_items)} item(s) will expire within 2 months.")
 
-    if soon_count > 0:
-        st.markdown(f"""
-            <p style="font-size:22px; color:#ff7f0e; font-weight:bold;">
-                ⚠️ {soon_count} item{'s' if soon_count > 1 else ''} will expire within 2 months.
-            </p>
-            <p style="font-size:16px; color:#ff7f0e;">
-                Consider reordering soon.
-            </p>
-        """, unsafe_allow_html=True)
+    if not low_stock_items.empty:
+        st.info(f"📦 {len(low_stock_items)} item(s) have reached or fallen below minimum stock level.")
 
-    # Combine all items needing attention
-    reorder_items = pd.concat([low_stock_items, reorder_items_exp]).drop_duplicates(subset=['cat_no.'])
+    # Apply color coding
+    def highlight_row(row):
+        if row['expiration'] < today:
+            return ['background-color: lightcoral; color: white'] * len(row)
+        elif row['expiration'] <= today + pd.DateOffset(months=2):
+            return ['background-color: khaki'] * len(row)
+        elif row['quantity'] <= row['minimum_stock_level']:
+            return ['background-color: lightblue'] * len(row)
+        return [''] * len(row)
 
-    search_term = st.text_input("🔍 Search item or catalog no.").lower()
-    if search_term:
-        reorder_items = reorder_items[
-            reorder_items['item'].str.lower().str.contains(search_term) |
-            reorder_items['cat_no.'].str.lower().str.contains(search_term)
-        ]
+    styled_df = df.style.apply(highlight_row, axis=1)
 
-    if reorder_items.empty:
-        st.success("🎉 No items to reorder based on stock or expiration!")
-        st.stop()
+    # Editable table
+    edited_df = st.data_editor(
+        df,
+        num_rows="dynamic",
+        use_container_width=True,
+        hide_index=True
+    )
 
-    if "Order Qty" not in reorder_items.columns:
-        reorder_items["Order Qty"] = 0
+    # Save changes if edited
+    if not edited_df.equals(df):
+        edited_df.to_csv(inventory_file, index=False)
+        st.success("✅ Inventory updated successfully.")
 
-    display_df = reorder_items[['item', 'cat_no.', 'quantity', 'order_unit', 'expiration', 'minimum_stock_level', 'Order Qty']].copy()
-    display_df = display_df.rename(columns={'quantity': 'Current Qty'})
-
-    # Use st.data_editor with editable "Order Qty"
-    edited_df = st.data_editor(
-        display_df,
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "item": st.column_config.Column(disabled=True),
-            "cat_no.": st.column_config.Column(disabled=True),
-            "Current Qty": st.column_config.Column(disabled=True),
-            "minimum_stock_level": st.column_config.Column(disabled=True),
-            "order_unit": st.column_config.Column(disabled=True),
-            "expiration": st.column_config.Column(disabled=True),
-            "Order Qty": st.column_config.NumberColumn(min_value=0, step=1),
-        },
-        key="order_qty_editor"
-    )
-
-    # Save order log button
-    if st.button("✅ Save Order Log"):
-        order_records = []
-        for _, row in edited_df.iterrows():
-            if row["Order Qty"] > 0:
-                order_records.append({
-                    "timestamp": datetime.now(),
-                    "user": st.session_state.user_initials or "N/A",
-                    "cat_no.": row["cat_no."],
-                    "item": row["item"],
-                    "expiration": row["expiration"],
-                    "order_unit": row["order_unit"],
-                    "quantity_order": row["Order Qty"]
-                })
-        if order_records:
-            st.session_state.order_log = pd.concat(
-                [st.session_state.order_log, pd.DataFrame(order_records)],
-                ignore_index=True
-            )
-            st.success("Order log saved!")
-        else:
-            st.info("No order quantities entered.")
-
-    # Show saved orders
-    if not st.session_state.order_log.empty:
-        st.markdown("### 📜 Order Log")
-        st.dataframe(
-            st.session_state.order_log.sort_values(by="timestamp", ascending=False),
-            use_container_width=True
-        )
 
 # ---- Tab 4 ----
 with tab4:
