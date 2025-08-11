@@ -21,11 +21,11 @@ st.image("mmcccl_logo.png", use_container_width=True)
 # ---- Load Excel Data ----
 @st.cache_data
 def load_data():
-    try:
-        df = pd.read_excel("MMCCCL_supply_july.xlsx", engine="openpyxl")
-    except FileNotFoundError:
-        st.error("Error: File 'MMCCCL_supply_july.xlsx' not found.")
-        return pd.DataFrame()
+    try:
+        df = pd.read_excel("MMCCCL_supply_july.xlsx", engine="openpyxl")
+    except FileNotFoundError:
+        st.error("Error: File 'MMCCCL_supply_july.xlsx' not found.")
+        return pd.DataFrame()
 
     df['expiration'] = pd.to_datetime(df['expiration'], errors='coerce')
     if 'ordered' not in df.columns: df['ordered'] = False
