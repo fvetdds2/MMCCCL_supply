@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import io
-
 # Page setup
 st.set_page_config(page_title="Lab Supply Tracker", layout="wide")
 
@@ -62,7 +61,7 @@ audit_df = st.session_state.location_audit_log
 tab1, tab2, tab3, tab4 = st.tabs([
     "📊 Inventory + Update Log",
     "📦 Item Locations",
-    "⏰ Expired & Expiring in 60 Days",
+    "⏰ Needed to order & Expired & Expiring in 60 Days",
     "📁 Export Data"
 ])
 
@@ -225,12 +224,9 @@ with tab2:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
-import streamlit as st
-import pandas as pd
-from datetime import datetime
-
+#tab 3#
 with tab3:
-    st.subheader("⚠️ Items Needing Reorder")
+    st.subheader("⚠️ Items Needing Reorder / Attention")
 
     if "order_log" not in st.session_state:
         st.session_state.order_log = pd.DataFrame(columns=[
@@ -242,14 +238,22 @@ with tab3:
     today = datetime.now()
     two_months_from_now = today + pd.DateOffset(months=2)
 
+    # --- Identify Expired & Soon to Expire ---
     expired = df[df['expiration'].notna() & (df['expiration'] < today)]
     soon_expire = df[df['expiration'].notna() & (df['expiration'] >= today) & (df['expiration'] <= two_months_from_now)]
-    reorder_items = pd.concat([expired, soon_expire]).drop_duplicates()
 
+    # --- Identify Urgent Reorder (Low Stock) ---
+    if "minimum_stock_level" not in df.columns:
+        df["minimum_stock_level"] = 0  # default if missing
+
+    urgent_reorder = df[df["quantity"] <= df["minimum_stock_level"]]
+
+    # --- Counts for Alerts ---
     expired_count = expired.shape[0]
     soon_count = soon_expire.shape[0]
+    urgent_count = urgent_reorder.shape[0]
 
-    # Alerts with styled text
+    # --- Alerts ---
     if expired_count > 0:
         st.markdown(f"""
             <p style="font-size:28px; color:#d62728; font-weight:bold;">
@@ -270,6 +274,19 @@ with tab3:
             </p>
         """, unsafe_allow_html=True)
 
+    if urgent_count > 0:
+        st.markdown(f"""
+            <p style="font-size:26px; color:#b30000; font-weight:bold;">
+                🔴 URGENT: {urgent_count} item{'s' if urgent_count > 1 else ''} are at or below minimum stock level!
+            </p>
+            <p style="font-size:16px; color:#b30000;">
+                Reorder immediately to avoid supply shortages.
+            </p>
+        """, unsafe_allow_html=True)
+
+    # --- Combine All Items to Show ---
+    reorder_items = pd.concat([expired, soon_expire, urgent_reorder]).drop_duplicates()
+
     search_term = st.text_input("🔍 Search item or catalog no.").lower()
     if search_term:
         reorder_items = reorder_items[
@@ -278,47 +295,35 @@ with tab3:
         ]
 
     if reorder_items.empty:
-        st.success("🎉 No expired or soon-to-expire items!")
+        st.success("🎉 No expired, soon-to-expire, or low-stock items!")
         st.stop()
 
     if "Order Qty" not in reorder_items.columns:
         reorder_items["Order Qty"] = 0
 
-    # Prepare data for st.data_editor
-    display_df = reorder_items[['item', 'cat_no.', 'quantity', 'order_unit', 'expiration', 'Order Qty']].copy()
-
-    # We will add a "backgroundColor" style column for the Order Qty cell
-    def get_order_qty_cell_color(expiration_date):
-        if expiration_date < today:
-            return "lightblue"
-        elif today <= expiration_date <= two_months_from_now:
-            return "lightcoral"
+    # Highlighting function
+    def highlight_row(row):
+        if row["quantity"] <= row["minimum_stock_level"]:
+            return ['background-color: lightpink'] * len(row)
+        elif pd.notna(row["expiration"]) and row["expiration"] < today:
+            return ['background-color: lightblue'] * len(row)
+        elif pd.notna(row["expiration"]) and today <= row["expiration"] <= two_months_from_now:
+            return ['background-color: lightcoral'] * len(row)
         else:
-            return ""
+            return [''] * len(row)
 
-    # Build styles dict: { (row_idx, col_name): {"backgroundColor": "color"} }
-    styles = []
-    for i, exp_date in enumerate(display_df['expiration']):
-        color = get_order_qty_cell_color(exp_date)
-        if color:
-            styles.append({
-                "if": {"row_index": i, "column_id": "Order Qty"},
-                "backgroundColor": color
-            })
+    # Display editable table
+    display_df = reorder_items[['item', 'cat_no.', 'quantity', 'minimum_stock_level', 'order_unit', 'expiration', 'Order Qty']].copy()
 
-    # Streamlit's st.data_editor supports a new argument 'styling' for styles (in recent versions)
-    # But if unavailable, use the experimental way with st.dataframe styling + data_editor separately.
-    # For simplicity, we’ll just inject a bit of CSS to color cells based on data attribute.
-
-    # Use st.data_editor with editable "Order Qty"
     edited_df = st.data_editor(
-        display_df,
+        display_df.style.apply(highlight_row, axis=1),
         use_container_width=True,
         hide_index=True,
         column_config={
             "item": st.column_config.Column(disabled=True),
             "cat_no.": st.column_config.Column(disabled=True),
             "quantity": st.column_config.Column(disabled=True),
+            "minimum_stock_level": st.column_config.Column(disabled=True),
             "order_unit": st.column_config.Column(disabled=True),
             "expiration": st.column_config.Column(disabled=True),
             "Order Qty": st.column_config.NumberColumn(min_value=0, step=1),
@@ -329,7 +334,7 @@ with tab3:
     # Save order log button
     if st.button("✅ Save Order Log"):
         order_records = []
-        for _, row in edited_df.iterrows():
+        for _, row in edited_df.reset_index(drop=True).iterrows():
             if row["Order Qty"] > 0:
                 order_records.append({
                     "timestamp": datetime.now(),
@@ -356,6 +361,7 @@ with tab3:
             st.session_state.order_log.sort_values(by="timestamp", ascending=False),
             use_container_width=True
         )
+
 
 # ---- Tab 4 ----
 with tab4:
