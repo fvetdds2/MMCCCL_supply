@@ -256,7 +256,7 @@ with tab3:
     # --- Alerts ---
     if expired_count > 0:
         st.markdown(f"""
-            <p style="font-size:28px; color:#d62728; font-weight:bold;">
+            <p style="font-size:28px; color:#D3D3D3; font-weight:bold;">
                 🚨 {expired_count} item{'s' if expired_count > 1 else ''} have EXPIRED!
             </p>
             <p style="font-size:18px; color:#d62728;">
@@ -266,7 +266,7 @@ with tab3:
 
     if soon_count > 0:
         st.markdown(f"""
-            <p style="font-size:22px; color:#ff7f0e; font-weight:bold;">
+            <p style="font-size:22px; color:#008000; font-weight:bold;">
                 ⚠️ {soon_count} item{'s' if soon_count > 1 else ''} will expire within 2 months.
             </p>
             <p style="font-size:16px; color:#ff7f0e;">
