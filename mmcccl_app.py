@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime
 import io
 # Page setup
-st.set_page_config(page_title="Lab Supply Tracker", layout="wide")
+st.set_page_config(page_title="MMCCCL Lab Supply Tracker", layout="wide")
 
 # --- Style ---
 st.markdown("""
