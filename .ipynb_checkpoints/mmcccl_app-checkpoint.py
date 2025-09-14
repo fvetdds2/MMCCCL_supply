@@ -442,4 +442,4 @@ with tab3:
             "item": st.column_config.Column(disabled=True),
             "cat_no.": st.column_config.Column(disabled=True),
             "quantity": st.column_config.Column(disabled=True),
-            "minimum_stock_level":}
+            "minimum_stock_level":})
