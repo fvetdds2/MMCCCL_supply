@@ -432,14 +432,19 @@ with tab3:
         use_container_width=True
     )
 
-    # Provide a separate editable table (no style object passed)
     st.markdown("#### Enter Order Quantities")
-    edited_df = st.data_editor(
-        display_df,
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "item": st.column_config.Column(disabled=True),
-            "cat_no.": st.column_config.Column(disabled=True),
-            "quantity": st.column_config.Column(disabled=True),
-            "minimum_stock_level":})
+edited_df = st.data_editor(
+    display_df,
+    use_container_width=True,
+    hide_index=True,
+    column_config={
+        "item": st.column_config.Column(disabled=True),
+        "cat_no.": st.column_config.Column(disabled=True),
+        "quantity": st.column_config.Column(disabled=True),
+        "minimum_stock_level": st.column_config.Column(disabled=True),  # ✅ add the value
+        "order_unit": st.column_config.Column(disabled=True),
+        "expiration": st.column_config.Column(disabled=True),
+        "Order Qty": st.column_config.NumberColumn(min_value=0, step=1),
+    },
+    key="order_qty_editor",
+)
