@@ -30,6 +30,32 @@ def to_dt(x):
         return pd.to_datetime(x)
     except Exception:
         return pd.NaT
+def excel_safe(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+
+    # 1) Make any datetime tz-naive (Excel can't handle tz-aware)
+    for col in out.columns:
+        # If column is datetime with timezone, drop tz
+        if pd.api.types.is_datetime64tz_dtype(out[col]):
+            out[col] = out[col].dt.tz_convert(None)
+        # If it's any datetime dtype, coerce to datetime and ensure tz-naive
+        if pd.api.types.is_datetime64_any_dtype(out[col]):
+            out[col] = pd.to_datetime(out[col], errors="coerce")
+            # (already tz-naive here; if it had tz, we converted above)
+
+    # 2) Ensure object columns are scalar-friendly
+    def _coerce_cell(x):
+        # Keep scalars and timestamps; stringify everything else
+        if isinstance(x, (str, int, float, bool, type(None), pd.Timestamp)):
+            return x
+        return str(x)
+
+    for col in out.columns:
+        if out[col].dtype == "object":
+            out[col] = out[col].map(_coerce_cell)
+
+    return out
+
 
 # ---- Load Excel Data ----
 @st.cache_data
