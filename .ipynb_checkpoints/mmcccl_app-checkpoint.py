@@ -1,14 +1,12 @@
-import re
-import io
 import streamlit as st
 import pandas as pd
 from datetime import datetime, date
+import io
 
-# =========================
-# Page setup & Styling
-# =========================
+# --- Page setup ---
 st.set_page_config(page_title="MMCCCL Lab Supply Tracker", layout="wide")
 
+# --- Styles ---
 st.markdown("""
     <style>
     .big-font { font-size: 3em !important; font-weight: bold; color: #0072b2; padding-top: 2rem; }
@@ -16,529 +14,102 @@ st.markdown("""
     .secondary-header { color: #4b8c6a; font-size: 1.5em; font-weight: 500; margin-top: 0; }
     .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p { font-size: 1.25rem; }
     </style>
-""", unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
 
 st.image("mmcccl_logo.png", use_container_width=True)
 
-# =========================
-# Helpers
-# =========================
-def _canon(s: str) -> str:
-    """Normalize a column name for robust matching."""
-    return re.sub(r'[^a-z0-9]', '', s.lower())
-
-def map_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Rename columns from messy headers to the canonical ones we use.
-    Creates missing columns with sensible defaults.
-    """
-    if df.empty:
-        # Ensure all canonical columns exist even if file is missing/empty
-        for col, default in CANON_DEFAULTS.items():
-            df[col] = default
-        return df
-
-    # Map of canonical -> candidate canon names
-    candidates = {
-        'item': ['item', 'name', 'description', 'product', 'material'],
-        'cat_no.': ['catno', 'catnumber', 'catalognumber', 'catalogno', 'cat', 'cat#', 'catno.'],
-        'quantity': ['quantity', 'qty', 'count', 'amount', 'qnt'],
-        'location': ['location', 'room', 'area'],
-        'shelf': ['shelf', 'bin', 'rack', 'drawer'],
-        'expiration': ['expiration', 'expiry', 'expdate', 'expirationdate', 'expirydate', 'exp'],
-        'lot #': ['lot', 'lot#', 'lotno', 'lotnumber'],
-        'ordered': ['ordered', 'onorder', 'ordered?'],
-        'order_date': ['orderdate', 'ordereddate', 'dateordered'],
-        'order_unit': ['orderunit', 'unit', 'uom', 'packunit'],
-        'minimum_stock_level': ['minimumstocklevel', 'minstock', 'minstocklevel', 'reorderpoint', 'minimum_stock_lev'],
-    }
-
-    # Build reverse index: canon(original_col) -> original_col
-    canon_to_original = {_canon(c): c for c in df.columns}
-
-    rename_map = {}
-    for target, cand_list in candidates.items():
-        found = None
-        for cand in cand_list:
-            if cand in canon_to_original:
-                found = canon_to_original[cand]
-                break
-        if found is not None:
-            rename_map[found] = target
-
-    # Apply renames where we have a confident match
-    df = df.rename(columns=rename_map)
-
-    # Ensure missing canonical columns exist with defaults
-    for col, default in CANON_DEFAULTS.items():
-        if col not in df.columns:
-            df[col] = default
-
-    # Enforce types / coercions
-    # Dates
-    df['expiration'] = pd.to_datetime(df['expiration'], errors='coerce')
-    df['order_date'] = pd.to_datetime(df['order_date'], errors='coerce')
-    # Numbers
-    df['quantity'] = pd.to_numeric(df['quantity'], errors='coerce').fillna(0).astype(int)
-    df['minimum_stock_level'] = pd.to_numeric(df['minimum_stock_level'], errors='coerce').fillna(0).astype(int)
-    # Strings
-    for scol in ['item', 'cat_no.', 'lot #', 'location', 'shelf', 'order_unit']:
-        df[scol] = df[scol].astype(str).fillna('')
-
-    # Booleans
-    if 'ordered' in df.columns:
-        if df['ordered'].dtype != bool:
-            df['ordered'] = df['ordered'].astype(str).str.strip().str.lower().isin(['true','1','yes','y','t'])
-    else:
-        df['ordered'] = False
-
-    return df
-
+# --- Helpers ---
 def to_dt(x):
-    """Robust converter to pandas Timestamp or NaT."""
-    if x is None:
-        return pd.NaT
     try:
-        if isinstance(x, date):
-            return pd.to_datetime(x)
-        return pd.to_datetime(x)
-    except Exception:
+        return pd.to_datetime(x) if x else pd.NaT
+    except:
         return pd.NaT
 
 def excel_safe(df: pd.DataFrame) -> pd.DataFrame:
-    """Make a DataFrame safe to write to Excel: drop tz and stringify non-scalars."""
     out = df.copy()
     for col in out.columns:
-        # Timezone-aware -> tz-naive
         if pd.api.types.is_datetime64tz_dtype(out[col]):
             out[col] = out[col].dt.tz_convert(None)
         if pd.api.types.is_datetime64_any_dtype(out[col]):
             out[col] = pd.to_datetime(out[col], errors="coerce")
-
-        # Object columns: ensure scalars
         if out[col].dtype == "object":
-            out[col] = out[col].map(
-                lambda x: x if isinstance(x, (str, int, float, bool, type(None), pd.Timestamp)) else str(x)
-            )
+            out[col] = out[col].map(lambda x: x if isinstance(x, (str, int, float, bool, type(None), pd.Timestamp)) else str(x))
     return out
 
-# Canonical columns with defaults
-CANON_DEFAULTS = {
-    'item': '',
-    'cat_no.': '',
-    'quantity': 0,
-    'location': '',
-    'shelf': '',
-    'expiration': pd.NaT,
-    'lot #': '',
-    'ordered': False,
-    'order_date': pd.NaT,
-    'order_unit': '',
-    'minimum_stock_level': 0,
-}
-
-# =========================
-# Load Excel Data
-# =========================
+# --- Load Data ---
 @st.cache_data
 def load_data():
     try:
-        raw = pd.read_excel("MMCCCL_supply_july.xlsx", engine="openpyxl")
+        df = pd.read_excel("MMCCCL_supply_july.xlsx", engine="openpyxl")
+        df = df.dropna(axis=1, how='all')  # Drop all empty columns
     except FileNotFoundError:
-        st.error("Error: File 'MMCCCL_supply_july.xlsx' not found.")
-        return pd.DataFrame({k: [v] for k, v in CANON_DEFAULTS.items()}).iloc[0:0]
+        st.error("Excel file not found.")
+        return pd.DataFrame(columns=[
+            'item','cat_no.','quantity','location','shelf','expiration','lot #',
+            'ordered','order_date','order_unit','minimum_stock_level'])
 
-    df = map_columns(raw)
+    df['expiration'] = pd.to_datetime(df.get('expiration'), errors='coerce')
+    df['ordered'] = df.get('ordered', False)
+    df['order_date'] = pd.to_datetime(df.get('order_date'), errors='coerce')
+    df['quantity'] = pd.to_numeric(df.get('quantity'), errors='coerce').fillna(0).astype(int)
+
+    for col in ['location','shelf','order_unit','cat_no.','item','lot #']:
+        df[col] = df.get(col, "").astype(str)
+
+    df['minimum_stock_level'] = pd.to_numeric(df.get('minimum_stock_level'), errors='coerce').fillna(0).astype(int)
+
     return df
 
-# =========================
-# Session State Init
-# =========================
+# --- Init session state ---
 if 'df' not in st.session_state:
     st.session_state.df = load_data()
 
 if 'log' not in st.session_state:
-    st.session_state.log = pd.DataFrame(
-        columns=['timestamp', 'cat_no.', 'action', 'quantity', 'initials', 'lot #', 'expiration']
-    )
+    st.session_state.log = pd.DataFrame(columns=['timestamp', 'cat_no.', 'action', 'quantity', 'initials', 'lot #', 'expiration'])
 
-if 'location_audit_log' not in st.session_state:
-    st.session_state.location_audit_log = pd.DataFrame(
-        columns=['timestamp', 'user', 'cat_no.', 'item', 'field', 'old_value', 'new_value']
-    )
-
-if 'order_log' not in st.session_state:
-    st.session_state.order_log = pd.DataFrame(
-        columns=['timestamp', 'user', 'cat_no.', 'item', 'expiration', 'order_unit', 'quantity_order']
-    )
-
-# --- Global User Initials Input ---
 if 'user_initials' not in st.session_state:
     st.session_state.user_initials = ""
 
-st.session_state.user_initials = st.text_input(
-    "Enter your initials (for audit tracking):",
-    value=st.session_state.user_initials
-).upper()
+st.session_state.user_initials = st.text_input("Enter your initials:", value=st.session_state.user_initials).upper()
 
 if not st.session_state.user_initials:
-    st.warning("Please enter your initials to continue.")
+    st.warning("Please enter your initials to proceed.")
     st.stop()
 
-user_initials = st.session_state.user_initials
-df = st.session_state.df  # working reference
+# --- Tabs ---
+tab1, tab4 = st.tabs(["📊 Inventory Tracker", "📁 Export Data"])
 
-# =========================
-# Tabs
-# =========================
-tab1, tab2, tab3, tab4 = st.tabs([
-    "📊 Add or Remove items in the inventory + Update Log",
-    "📦 Editable Item Locations",
-    "⏰ Needed to order & Expired & Expiring in 60 Days",
-    "📁 Export Data into excel file"
-])
-
-# =========================
-# Tab 1: Inventory Update
-# =========================
+# --- Tab 1: Inventory Interaction ---
 with tab1:
-    st.subheader("📊 Inventory Level & Tracker")
-
-    # Ensure string types for search
-    st.session_state.df['cat_no.'] = st.session_state.df['cat_no.'].astype(str)
-    st.session_state.df['item'] = st.session_state.df['item'].astype(str)
+    st.subheader("📦 Inventory Level")
+    df = st.session_state.df
+    df['cat_no.'] = df['cat_no.'].astype(str)
+    df['item'] = df['item'].astype(str)
 
     search_term = st.text_input("Search catalog number or item name:").lower().strip()
     if search_term:
-        mask = (
-            st.session_state.df['cat_no.'].str.lower().str.contains(search_term, na=False) |
-            st.session_state.df['item'].str.lower().str.contains(search_term, na=False)
-        )
-        filtered_cat_nos = sorted(st.session_state.df[mask]['cat_no.'].unique())
+        mask = df['cat_no.'].str.lower().str.contains(search_term) | df['item'].str.lower().str.contains(search_term)
+        filtered = df[mask]
     else:
-        filtered_cat_nos = sorted(st.session_state.df['cat_no.'].unique())
+        filtered = df
 
-    if not filtered_cat_nos:
-        st.warning("No catalog numbers or items found.")
+    if filtered.empty:
+        st.warning("No matching items found.")
     else:
-        selected_cat = st.selectbox("Select Catalog Number", filtered_cat_nos)
-        item_data = st.session_state.df[st.session_state.df['cat_no.'] == selected_cat]
-        item_name = item_data['item'].values[0] if not item_data.empty else "N/A"
-        total_qty = int(item_data['quantity'].sum()) if not item_data.empty else 0
+        st.dataframe(filtered)
 
-        st.metric(label=f"{item_name} (Cat#: {selected_cat})", value=total_qty)
-
-        col1, col2 = st.columns(2)
-        with col1:
-            add_qty = st.number_input("Add Quantity", min_value=0, step=1, key="add_qty")
-            lot_number_add = st.text_input("Lot Number (Add)", key="lot_number_add")
-            expiration_date_add = st.date_input("Expiration Date (Add)", key="expiration_date_add", value=date.today())
-        with col2:
-            remove_qty_input = st.number_input("Remove Quantity", min_value=0, step=1, key="remove_qty")
-            lot_opts = item_data['lot #'].dropna().astype(str).unique() if 'lot #' in item_data.columns else []
-            lot_number_remove = st.selectbox("Lot Number (Remove)", lot_opts if len(lot_opts) > 0 else ["<none>"])
-            exp_opts_raw = item_data['expiration'].dropna().unique() if 'expiration' in item_data.columns else []
-            exp_opts = [pd.to_datetime(x) for x in exp_opts_raw]
-            expiration_remove = st.selectbox("Expiration Date (Remove)", exp_opts if len(exp_opts) > 0 else ["<none>"])
-
-        if st.button("Submit Update"):
-            timestamp = datetime.now()
-
-            # ADD path
-            if add_qty > 0:
-                new_row = {
-                    'item': item_name,
-                    'cat_no.': selected_cat,
-                    'quantity': int(add_qty),
-                    'location': item_data['location'].iloc[0] if not item_data.empty else "",
-                    'shelf': item_data['shelf'].iloc[0] if not item_data.empty else "",
-                    'expiration': to_dt(expiration_date_add),
-                    'lot #': str(lot_number_add),
-                    'ordered': False,
-                    'order_date': pd.NaT,
-                    'order_unit': item_data['order_unit'].iloc[0] if not item_data.empty else "",
-                    'minimum_stock_level': int(item_data['minimum_stock_level'].iloc[0]) if not item_data.empty else 0
-                }
-                st.session_state.df = pd.concat(
-                    [st.session_state.df, pd.DataFrame([new_row])],
-                    ignore_index=True
-                )
-
-                st.session_state.log = pd.concat(
-                    [st.session_state.log, pd.DataFrame([{
-                        'timestamp': timestamp,
-                        'cat_no.': selected_cat,
-                        'action': 'Add',
-                        'quantity': int(add_qty),
-                        'initials': user_initials,
-                        'lot #': str(lot_number_add),
-                        'expiration': to_dt(expiration_date_add)
-                    }])],
-                    ignore_index=True
-                )
-
-            # REMOVE path (track actual removed qty)
-            removed_qty_total = 0
-            can_remove = (
-                remove_qty_input > 0 and
-                lot_number_remove not in (None, "", "<none>") and
-                expiration_remove not in (None, "<none>")
-            )
-            if can_remove:
-                idx_match = st.session_state.df[
-                    (st.session_state.df['cat_no.'] == selected_cat) &
-                    (st.session_state.df['lot #'].astype(str) == str(lot_number_remove)) &
-                    (pd.to_datetime(st.session_state.df['expiration']) == pd.to_datetime(expiration_remove))
-                ].index
-
-                remaining = int(remove_qty_input)
-                for i in idx_match:
-                    available = int(st.session_state.df.at[i, 'quantity'])
-                    if available <= 0:
-                        continue
-                    if remaining >= available:
-                        removed_qty_total += available
-                        st.session_state.df.at[i, 'quantity'] = 0
-                        remaining -= available
-                    else:
-                        st.session_state.df.at[i, 'quantity'] = available - remaining
-                        removed_qty_total += remaining
-                        remaining = 0
-                        break
-
-                if removed_qty_total > 0:
-                    st.session_state.log = pd.concat(
-                        [st.session_state.log, pd.DataFrame([{
-                            'timestamp': timestamp,
-                            'cat_no.': selected_cat,
-                            'action': 'Remove',
-                            'quantity': int(removed_qty_total),
-                            'initials': user_initials,
-                            'lot #': str(lot_number_remove),
-                            'expiration': pd.to_datetime(expiration_remove)
-                        }])],
-                        ignore_index=True
-                    )
-            elif remove_qty_input > 0:
-                st.warning("Select a valid Lot and Expiration to remove from a specific batch.")
-
-            # Normalize df and drop zeros
-            st.session_state.df['quantity'] = pd.to_numeric(
-                st.session_state.df['quantity'], errors='coerce'
-            ).fillna(0).astype(int)
-            st.session_state.df = st.session_state.df[st.session_state.df['quantity'] > 0].copy()
-
-            st.success("Inventory successfully updated.")
-            st.rerun()
-
-        st.markdown("#### 🔁 Update History")
-        if not st.session_state.log.empty:
-            st.dataframe(
-                st.session_state.log[st.session_state.log['cat_no.'] == selected_cat].sort_values(
-                    by='timestamp', ascending=False
-                ),
-                use_container_width=True
-            )
-        else:
-            st.info("No updates logged yet for this item.")
-
-# =========================
-# Tab 2: Editable Locations
-# =========================
-with tab2:
-    st.subheader("📦 Item Locations")
-
-    # Force editable columns to strings
-    st.session_state.df["location"] = st.session_state.df["location"].astype(str)
-    st.session_state.df["shelf"] = st.session_state.df["shelf"].astype(str)
-
-    # Make editable copy with original index preserved
-    editable_df = st.session_state.df.copy()
-    editable_df.reset_index(inplace=True)  # keep original index as a column
-    editable_df.rename(columns={"index": "orig_index"}, inplace=True)
-
-    edited_df = st.data_editor(
-        editable_df[["orig_index", "item", "cat_no.", "location", "shelf"]],
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "orig_index": st.column_config.Column(disabled=True, width="small"),
-            "item": st.column_config.Column(disabled=True),
-            "cat_no.": st.column_config.Column(disabled=True),
-            "location": st.column_config.Column(required=True),
-            "shelf": st.column_config.Column(required=True)
-        },
-        key="locations_editor"
-    )
-
-    if st.button("💾 Save Location Changes"):
-        changes_made, audit_entries = False, []
-
-        for _, row in edited_df.iterrows():
-            idx = row["orig_index"]
-            for field in ["location", "shelf"]:
-                old_value = str(st.session_state.df.at[idx, field])
-                new_value = str(row[field])
-                if old_value != new_value:
-                    st.session_state.df.at[idx, field] = new_value
-                    changes_made = True
-                    audit_entries.append({
-                        "timestamp": datetime.now(),
-                        "user": st.session_state.user_initials or "N/A",
-                        "cat_no.": st.session_state.df.at[idx, "cat_no."],
-                        "item": st.session_state.df.at[idx, "item"],
-                        "field": field,
-                        "old_value": old_value,
-                        "new_value": new_value
-                    })
-
-        if changes_made:
-            st.session_state.location_audit_log = pd.concat(
-                [st.session_state.location_audit_log, pd.DataFrame(audit_entries)],
-                ignore_index=True
-            )
-            st.success("✅ Location/Shelf changes saved.")
-        else:
-            st.info("No changes detected.")
-
-    # Download updated inventory + logs (use XlsxWriter + excel_safe)
-    if not st.session_state.df.empty:
-        output_loc = io.BytesIO()
-        with pd.ExcelWriter(output_loc, engine="xlsxwriter") as writer:
-            excel_safe(st.session_state.df).to_excel(writer, sheet_name="Inventory", index=False)
-            excel_safe(st.session_state.location_audit_log).to_excel(writer, sheet_name="Location_Audit_Log", index=False)
-            excel_safe(st.session_state.log).to_excel(writer, sheet_name="Update_Log", index=False)
-            excel_safe(st.session_state.order_log).to_excel(writer, sheet_name="Order_Log", index=False)
-        st.download_button(
-            label="📥 Download Updated Inventory (Excel)",
-            data=output_loc.getvalue(),
-            file_name="MMCCCL_supply_updated_locations.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-
-# =========================
-# Tab 3: Reorder / Expiry
-# =========================
-with tab3:
-    st.subheader("⚠️ Items Needing Reorder / Attention")
-
-    today = datetime.now()
-    two_months_from_now = today + pd.DateOffset(months=2)
-
-    expired = df[df['expiration'].notna() & (df['expiration'] < today)]
-    soon_expire = df[df['expiration'].notna() & (df['expiration'] >= today) & (df['expiration'] <= two_months_from_now)]
-    urgent_reorder = df[df["quantity"] <= df["minimum_stock_level"]]
-
-    expired_count = expired.shape[0]
-    soon_count = soon_expire.shape[0]
-    urgent_count = urgent_reorder.shape[0]
-
-    if expired_count > 0:
-        st.markdown(f"<p style='font-size:28px; color:#696969; font-weight:bold;'>🚨 {expired_count} expired (gray)</p>", unsafe_allow_html=True)
-    if urgent_count > 0:
-        st.markdown(f"<p style='font-size:26px; color:#b30000; font-weight:bold;'>🔴 {urgent_count} at/below min (orange)</p>", unsafe_allow_html=True)
-    if soon_count > 0:
-        st.markdown(f"<p style='font-size:22px; color:#008000; font-weight:bold;'>⚠️ {soon_count} expire within 2 months (green)</p>", unsafe_allow_html=True)
-
-    reorder_items = pd.concat([expired, soon_expire, urgent_reorder]).drop_duplicates()
-
-    search_term2 = st.text_input("🔍 Search item or catalog no.").lower().strip()
-    if search_term2:
-        reorder_items = reorder_items[
-            reorder_items['item'].str.lower().str.contains(search_term2, na=False) |
-            reorder_items['cat_no.'].str.lower().str.contains(search_term2, na=False)
-        ]
-
-    if reorder_items.empty:
-        st.success("🎉 No expired, soon-to-expire, or low-stock items!")
-    else:
-        if "Order Qty" not in reorder_items.columns:
-            reorder_items["Order Qty"] = 0
-
-        # Colored display (non-editable)
-        def highlight_row(row):
-            if row["quantity"] <= row["minimum_stock_level"]:
-                return ['background-color: lightcoral'] * len(row)
-            elif pd.notna(row["expiration"]) and row["expiration"] < today:
-                return ['background-color: lightgray'] * len(row)
-            elif pd.notna(row["expiration"]) and today <= row["expiration"] <= two_months_from_now:
-                return ['background-color: lightgreen'] * len(row)
-            else:
-                return [''] * len(row)
-
-        display_df = reorder_items[['item','cat_no.','quantity','minimum_stock_level','order_unit','expiration','Order Qty']].copy()
-        st.markdown("#### Items Requiring Attention (colored)")
-        st.dataframe(display_df.style.apply(highlight_row, axis=1), use_container_width=True)
-
-        # Editable version (no styles)
-        st.markdown("#### Enter Order Quantities")
-        edited_df_tab3 = st.data_editor(
-            display_df,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "item": st.column_config.Column(disabled=True),
-                "cat_no.": st.column_config.Column(disabled=True),
-                "quantity": st.column_config.Column(disabled=True),
-                "minimum_stock_level": st.column_config.Column(disabled=True),
-                "order_unit": st.column_config.Column(disabled=True),
-                "expiration": st.column_config.Column(disabled=True),
-                "Order Qty": st.column_config.NumberColumn(min_value=0, step=1),
-            },
-            key="order_qty_editor"
-        )
-
-        if st.button("✅ Save Order Log"):
-            entries = []
-            for _, r in edited_df_tab3.reset_index(drop=True).iterrows():
-                qty = int(r.get("Order Qty", 0) or 0)
-                if qty > 0:
-                    entries.append({
-                        "timestamp": datetime.now(),
-                        "user": user_initials,
-                        "cat_no.": r["cat_no."],
-                        "item": r["item"],
-                        "expiration": r["expiration"],
-                        "order_unit": r["order_unit"],
-                        "quantity_order": qty
-                    })
-            if entries:
-                st.session_state.order_log = pd.concat(
-                    [st.session_state.order_log, pd.DataFrame(entries)],
-                    ignore_index=True
-                )
-                st.success(f"Logged {len(entries)} order entr{'y' if len(entries)==1 else 'ies'}.")
-            else:
-                st.info("No order quantities were entered.")
-
-        # Show order log
-        st.markdown("### 🧾 Order Log")
-        if not st.session_state.order_log.empty:
-            st.dataframe(
-                st.session_state.order_log.sort_values(by="timestamp", ascending=False),
-                use_container_width=True
-            )
-        else:
-            st.info("No orders logged yet.")
-
-# =========================
-# Tab 4: Export (All Sheets)
-# =========================
+# --- Tab 4: Export ---
 with tab4:
-    st.subheader("📁 Export Inventory, Update Log, Location Audit Log, and Order Log")
-    if not st.session_state.df.empty:
-        output = io.BytesIO()
-        # ✅ Use XlsxWriter and sanitize ALL sheets
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            excel_safe(st.session_state.df).to_excel(writer, sheet_name='Inventory', index=False)
-            excel_safe(st.session_state.log).to_excel(writer, sheet_name='Update_Log', index=False)
-            excel_safe(st.session_state.location_audit_log).to_excel(writer, sheet_name='Location_Audit_Log', index=False)
-            excel_safe(st.session_state.order_log).to_excel(writer, sheet_name='Order_Log', index=False)
-        st.download_button(
-            label="⬇️ Download Excel",
-            data=output.getvalue(),
-            file_name="MMCCCL_lab_inventory_export.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-    else:
-        st.info("No data to export yet.")
+    st.subheader("📁 Download Inventory")
+
+    df_to_save = excel_safe(st.session_state.df.dropna(axis=1, how='all'))
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+        df_to_save.to_excel(writer, sheet_name="Inventory", index=False)
+
+    st.download_button(
+        label="📥 Download Current Inventory as Excel",
+        data=buffer.getvalue(),
+        file_name="MMCCCL_Inventory_Export.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
