@@ -5,6 +5,38 @@ import io
 # Page setup
 st.set_page_config(page_title="Lab Supply Tracker", layout="wide")
 
+
+# Create the output path
+output_loc = f"mmcccl_inventory_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+
+df_to_save = st.session_state.df.copy()
+
+# Clean: drop empty cols/rows
+df_to_save = df_to_save.dropna(axis=1, how='all')
+df_to_save = df_to_save.dropna(axis=0, how='all')
+
+# ✅ Prevent writing an empty sheet
+if df_to_save.empty:
+    st.error("No data available to export. Please ensure the inventory is not empty.")
+else:
+    # Safe-to-Excel conversion
+    df_to_save = excel_safe(df_to_save)
+
+    # Write Excel file
+    with pd.ExcelWriter(output_loc, engine="openpyxl") as writer:
+        df_to_save.to_excel(writer, sheet_name="Inventory", index=False)
+
+    # Load the file to buffer for download
+    with open(output_loc, "rb") as f:
+        bytes_data = f.read()
+
+    st.download_button(
+        label="📥 Download Inventory Excel File",
+        data=bytes_data,
+        file_name=output_loc,
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
 # --- Style ---
 st.markdown("""
     <style>
