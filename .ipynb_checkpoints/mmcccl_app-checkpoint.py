@@ -30,7 +30,7 @@ def to_dt(x):
 @st.cache_data
 def load_data():
     try:
-        df = pd.read_excel("MMCCCL_supply_july.xlsx", engine="openpyxl")
+        df = pd.read_excel("MMCCCL_supply_july.xlsx", engine="xlsxwriter")
     except FileNotFoundError:
         st.error("Error: File 'MMCCCL_supply_july.xlsx' not found.")
         return pd.DataFrame()
@@ -223,7 +223,7 @@ with tab2:
     # Download updated inventory + audit log
     if not st.session_state.df.empty:
         output_loc = io.BytesIO()
-        with pd.ExcelWriter(output_loc, engine="openpyxl") as writer:
+        with pd.ExcelWriter(output_loc, engine="xlsxwriter") as writer:
             st.session_state.df.to_excel(writer, sheet_name="Inventory", index=False)
             st.session_state.location_audit_log.to_excel(writer, sheet_name="Location_Audit_Log", index=False)
         st.download_button(
@@ -376,7 +376,7 @@ with tab4:
     st.subheader("📁 Export Inventory, Update Log, Location Audit Log, and Order Log")
     if not df.empty:
         output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             df.to_excel(writer, sheet_name='Inventory', index=False)
             st.session_state.log.to_excel(writer, sheet_name='Update_Log', index=False)
             st.session_state.location_audit_log.to_excel(writer, sheet_name='Location_Audit_Log', index=False)
