@@ -8,3 +8,5 @@ pyzbar
 xlsxWriter
 datetime
 numpy
+
+
