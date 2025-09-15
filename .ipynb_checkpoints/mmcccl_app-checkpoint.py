@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import io
+
 # Page setup
 st.set_page_config(page_title="Lab Supply Tracker", layout="wide")
 
@@ -40,10 +41,6 @@ def load_data():
 if 'df' not in st.session_state: st.session_state.df = load_data()
 if 'log' not in st.session_state:
     st.session_state.log = pd.DataFrame(columns=['timestamp', 'cat_no.', 'action', 'quantity', 'initials', 'lot #', 'expiration'])
-if 'location_audit_log' not in st.session_state:
-    st.session_state.location_audit_log = pd.DataFrame(columns=['timestamp', 'user', 'cat_no.', 'item', 'field', 'old_value', 'new_value'])
-if 'order_log' not in st.session_state:
-    st.session_state.order_log = pd.DataFrame(columns=['timestamp', 'user', 'cat_no.', 'item', 'expiration', 'order_unit', 'quantity_order'])
 
 # --- Global User Initials Input ---
 if 'user_initials' not in st.session_state: st.session_state.user_initials = ""
@@ -55,15 +52,9 @@ if not st.session_state.user_initials:
 user_initials = st.session_state.user_initials
 df = st.session_state.df
 log_df = st.session_state.log
-audit_df = st.session_state.location_audit_log
 
 # ---- Tabs ----
-tab1, tab2, tab3, tab4 = st.tabs([
-    "📊 Inventory + Update Log",
-    "📦 Item Locations",
-    "⏰ Needed to order & Expired & Expiring in 60 Days",
-    "📁 Export Data"
-])
+tab1, tab2, tab3 = st.tabs(["📊 Inventory + Update Log", "📦 Item Locations", "⏰ Needed to order & Expired"])
 
 # ---- Tab 1 ----
 with tab1:
@@ -81,9 +72,8 @@ with tab1:
         item_name = item_data['item'].values[0] if not item_data.empty else "N/A"
         total_qty = item_data['quantity'].sum() if not item_data.empty else 0
         
-        # Display the metric here to always show the latest quantity
         st.metric(label=f"{item_name} (Cat#: {selected_cat})", value=total_qty)
-        
+
         col1, col2 = st.columns(2)
         with col1:
             add_qty = st.number_input("Add Quantity", min_value=0, step=1, key="add_qty")
@@ -138,6 +128,19 @@ with tab1:
         st.markdown("#### 🔁 Update History")
         st.dataframe(st.session_state.log[st.session_state.log['cat_no.'] == selected_cat].sort_values(by='timestamp', ascending=False), use_container_width=True)
 
+        # Download button for current inventory and logs
+        if not st.session_state.df.empty:
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine="openpyxl") as writer:
+                st.session_state.df.to_excel(writer, sheet_name="Inventory", index=False)
+                st.session_state.log.to_excel(writer, sheet_name="Update_Log", index=False)
+
+            st.download_button(
+                label="⬇️ Download Updated Inventory + Log",
+                data=output.getvalue(),
+                file_name=f"MMCCCL_inventory_log_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
 with tab2:
     st.subheader("📦 Item Locations")
 
@@ -362,35 +365,3 @@ with tab3:
         )
 
 
-with tab4:
-    st.subheader("📁 Export Inventory, Update Log, Location Audit Log, and Order Log")
-
-    timestamp = datetime.now().strftime("%Y-%m-%d")
-    output = io.BytesIO()
-
-    sheets_written = False  # Track if at least one sheet is written
-
-    with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        if not df.empty:
-            df.to_excel(writer, sheet_name="Inventory", index=False)
-            sheets_written = True
-        if not st.session_state.log.empty:
-            st.session_state.log.to_excel(writer, sheet_name="Update_Log", index=False)
-            sheets_written = True
-        if not st.session_state.location_audit_log.empty:
-            st.session_state.location_audit_log.to_excel(writer, sheet_name="Location_Audit_Log", index=False)
-            sheets_written = True
-        if not st.session_state.order_log.empty:
-            st.session_state.order_log.to_excel(writer, sheet_name="Order_Log", index=False)
-            sheets_written = True
-
-        if not sheets_written:
-            st.warning("⚠️ All dataframes are empty. Nothing to export.")
-            st.stop()
-
-    st.download_button(
-        label="⬇️ Download Excel",
-        data=output.getvalue(),
-        file_name=f"MMCCCL_lab_inventory_export_{timestamp}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
