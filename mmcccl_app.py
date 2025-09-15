@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import io
 
 # --- Page setup ---
@@ -13,6 +13,7 @@ st.markdown("""
     .main-header { color: #0072b2; font-size: 2.5em; font-weight: 600; margin-bottom: 0; }
     .secondary-header { color: #4b8c6a; font-size: 1.5em; font-weight: 500; margin-top: 0; }
     .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p { font-size: 1.25rem; }
+    .low-stock { background-color: #ffcccc !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -93,10 +94,21 @@ with tab1:
     else:
         filtered = df
 
+    # Highlight low stock or near expiration
+    today = pd.Timestamp.today()
+    soon = today + pd.Timedelta(days=30)
+
+    def highlight_row(row):
+        if row['quantity'] <= row['minimum_stock_level'] or (pd.notna(row['expiration']) and row['expiration'] < soon):
+            return ['background-color: #ffcccc'] * len(row)
+        else:
+            return [''] * len(row)
+
     if filtered.empty:
         st.warning("No matching items found.")
     else:
-        st.dataframe(filtered)
+        styled_df = filtered.style.apply(highlight_row, axis=1)
+        st.dataframe(styled_df, use_container_width=True)
 
 # --- Tab 4: Export ---
 with tab4:
