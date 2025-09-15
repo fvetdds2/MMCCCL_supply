@@ -7,3 +7,5 @@ opencv-python-headless
 pyzbar
 xlsxwriter
 datetime
+io
+pathlib 
