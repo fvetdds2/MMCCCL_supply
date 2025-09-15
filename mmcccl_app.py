@@ -20,27 +20,46 @@ st.markdown("""
 st.image("mmcccl_logo.png", use_container_width=True)
 
 # ----------------------------
-# Helpers
+# Robust Excel writer (ALWAYS leaves at least one visible active sheet)
 # ----------------------------
 def build_excel_bytes(sheets: dict) -> bytes:
     """
     Write a dict of {sheet_name: DataFrame} to an in-memory Excel file safely.
-    Guarantees at least one visible sheet by adding a small placeholder if needed.
-    Returns the bytes for download.
+    - Only writes non-empty DataFrames as sheets.
+    - If none are written, adds an 'Info' sheet with a message.
+    - Ensures at least one sheet is visible and marks it active to avoid the
+      openpyxl 'At least one sheet must be visible' error.
     """
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        sheets_written = 0
+        # Write non-empty sheets (truncate sheet names to Excel's 31-char limit)
         for name, df in sheets.items():
             if isinstance(df, pd.DataFrame) and not df.empty:
-                df.to_excel(writer, sheet_name=name, index=False)
-                sheets_written += 1
+                safe_name = str(name)[:31]
+                df.to_excel(writer, sheet_name=safe_name, index=False)
 
-        if sheets_written == 0:
-            # Prevent openpyxl error: ensure at least one visible sheet exists
-            pd.DataFrame({"Info": ["No data available to export."]}).to_excel(
-                writer, sheet_name="Info", index=False
-            )
+        # Access the openpyxl workbook
+        book = writer.book
+
+        # If nothing got written, add a placeholder visible sheet
+        if len(book.worksheets) == 0:
+            ws = book.create_sheet(title="Info")
+            ws.append(["No data available to export."])
+
+        # Make sure at least one sheet is visible
+        visible_found = False
+        for ws in book.worksheets:
+            # openpyxl uses 'visible', 'hidden', 'veryHidden'
+            if getattr(ws, "sheet_state", "visible") == "visible":
+                visible_found = True
+                break
+        if not visible_found:
+            # Unhide the first worksheet
+            book.worksheets[0].sheet_state = "visible"
+
+        # Ensure the first (visible) worksheet is active
+        book.active = 0
+
     return output.getvalue()
 
 # ----------------------------
@@ -108,7 +127,7 @@ if not st.session_state.user_initials:
     st.stop()
 
 user_initials = st.session_state.user_initials
-df = st.session_state.df  # convenient alias
+df = st.session_state.df  # alias
 
 # ----------------------------
 # Tabs
@@ -244,21 +263,19 @@ with tab1:
         )
 
         # ----------------------------
-        # Download button (Tab 1)
-        # Safe against empty workbook
+        # Download button (Tab 1) — SAFE
         # ----------------------------
-        if not st.session_state.df.empty or not st.session_state.log.empty:
-            excel_bytes = build_excel_bytes({
-                "Inventory": st.session_state.df,
-                "Update_Log": st.session_state.log
-            })
-            st.download_button(
-                label="⬇️ Download Updated Inventory + Log",
-                data=excel_bytes,
-                file_name=f"MMCCCL_inventory_log_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="dl_tab1"
-            )
+        excel_bytes = build_excel_bytes({
+            "Inventory": st.session_state.df,
+            "Update_Log": st.session_state.log
+        })
+        st.download_button(
+            label="⬇️ Download Updated Inventory + Log",
+            data=excel_bytes,
+            file_name=f"MMCCCL_inventory_log_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="dl_tab1"
+        )
 
 # ----------------------------
 # Tab 2: Item locations
@@ -324,7 +341,7 @@ with tab2:
         use_container_width=True
     )
 
-    # Download updated inventory + audit log
+    # Download updated inventory + audit log (SAFE)
     excel_bytes_tab2 = build_excel_bytes({
         "Inventory": st.session_state.df,
         "Location_Audit_Log": st.session_state.location_audit_log
@@ -355,19 +372,15 @@ with tab3:
         df["minimum_stock_level"] = 0
     urgent_reorder = df[df["quantity"] <= df["minimum_stock_level"]]
 
-    # Counts for alerts
+    # Alerts
     expired_count = expired.shape[0]
     soon_count = soon_expire.shape[0]
     urgent_count = urgent_reorder.shape[0]
 
-    # Alerts
     if expired_count > 0:
         st.markdown(f"""
             <p style="font-size:28px; color:#696969; font-weight:bold;">
-                🚨 {expired_count} item{'s' if expired_count > 1 else ''} have EXPIRED! (gray highlight in the table)
-            </p>
-            <p style="font-size:18px; color:#696969;">
-                Please remove or exchange them immediately.
+                🚨 {expired_count} item{'s' if expired_count > 1 else ''} have EXPIRED!
             </p>
         """, unsafe_allow_html=True)
 
@@ -376,9 +389,6 @@ with tab3:
             <p style="font-size:26px; color:#b30000; font-weight:bold;">
                 🔴 URGENT: {urgent_count} item{'s' if urgent_count > 1 else ''} are at or below minimum stock level!
             </p>
-            <p style="font-size:16px; color:#b30000;">
-                Reorder immediately to avoid supply shortages.
-            </p>
         """, unsafe_allow_html=True)
 
     if soon_count > 0:
@@ -386,16 +396,13 @@ with tab3:
             <p style="font-size:22px; color:#008000; font-weight:bold;">
                 ⚠️ {soon_count} item{'s' if soon_count > 1 else ''} will expire within 2 months.
             </p>
-            <p style="font-size:16px; color:#008000;">
-                Consider reordering soon.
-            </p>
         """, unsafe_allow_html=True)
 
     # Combine items to show
     reorder_items = pd.concat([expired, soon_expire, urgent_reorder]).drop_duplicates()
 
     search_term_tab3 = st.text_input("🔍 Search item or catalog no.", key="tab3_search").lower()
-    if search_term_tab3:
+    if search_term_tab3 and not reorder_items.empty:
         if 'item' in reorder_items.columns and 'cat_no.' in reorder_items.columns:
             reorder_items = reorder_items[
                 reorder_items['item'].str.lower().str.contains(search_term_tab3)
@@ -406,7 +413,7 @@ with tab3:
         st.success("🎉 No expired, soon-to-expire, or low-stock items!")
         st.stop()
 
-    # Add an editable "Order Qty" column (default 0)
+    # Editable "Order Qty" (default 0)
     if "Order Qty" not in reorder_items.columns:
         reorder_items = reorder_items.copy()
         reorder_items["Order Qty"] = 0
@@ -414,7 +421,6 @@ with tab3:
     display_df = reorder_items[['item', 'cat_no.', 'quantity', 'minimum_stock_level',
                                 'order_unit', 'expiration', 'Order Qty']].copy()
 
-    # NOTE: st.data_editor does not accept pandas Styler; pass a plain DataFrame
     edited_df = st.data_editor(
         display_df,
         use_container_width=True,
