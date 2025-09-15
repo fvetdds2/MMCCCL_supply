@@ -59,10 +59,10 @@ audit_df = st.session_state.location_audit_log
 
 # ---- Tabs ----
 tab1, tab2, tab3, tab4 = st.tabs([
-    "📊 Add or Remove items in the inventory + Update Log",
-    "📦 Editable Item Locations",
+    "📊 Inventory + Update Log",
+    "📦 Item Locations",
     "⏰ Needed to order & Expired & Expiring in 60 Days",
-    "📁 Export Data into excel file"
+    "📁 Export Data"
 ])
 
 # ---- Tab 1 ----
@@ -366,6 +366,7 @@ with tab3:
 with tab4:
     st.subheader("📁 Export Inventory, Update Log, Location Audit Log, and Order Log")
     if not df.empty:
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d")
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             df.to_excel(writer, sheet_name='Inventory', index=False)
@@ -373,7 +374,7 @@ with tab4:
             st.session_state.location_audit_log.to_excel(writer, sheet_name='Location_Audit_Log', index=False)
             st.session_state.order_log.to_excel(writer, sheet_name='Order_Log', index=False)
         st.download_button(label="⬇️ Download Excel", data=output.getvalue(),
-                          file_name="MMCCCL_lab_inventory_export.xlsx",
+                          file_name="MMCCCL_lab_inventory_export_{timestamp}.xlsx",
                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     else:
         st.warning("No data to export.")
