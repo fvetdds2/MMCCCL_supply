@@ -362,19 +362,35 @@ with tab3:
         )
 
 
-# ---- Tab 4 ----
 with tab4:
     st.subheader("📁 Export Inventory, Update Log, Location Audit Log, and Order Log")
-    if not df.empty:
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d")
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df.to_excel(writer, sheet_name='Inventory', index=False)
-            st.session_state.log.to_excel(writer, sheet_name='Update_Log', index=False)
-            st.session_state.location_audit_log.to_excel(writer, sheet_name='Location_Audit_Log', index=False)
-            st.session_state.order_log.to_excel(writer, sheet_name='Order_Log', index=False)
-        st.download_button(label="⬇️ Download Excel", data=output.getvalue(),
-                          file_name="MMCCCL_lab_inventory_export_{timestamp}.xlsx",
-                          mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-    else:
-        st.warning("No data to export.")
+
+    timestamp = datetime.now().strftime("%Y-%m-%d")
+    output = io.BytesIO()
+
+    sheets_written = False  # Track if at least one sheet is written
+
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        if not df.empty:
+            df.to_excel(writer, sheet_name="Inventory", index=False)
+            sheets_written = True
+        if not st.session_state.log.empty:
+            st.session_state.log.to_excel(writer, sheet_name="Update_Log", index=False)
+            sheets_written = True
+        if not st.session_state.location_audit_log.empty:
+            st.session_state.location_audit_log.to_excel(writer, sheet_name="Location_Audit_Log", index=False)
+            sheets_written = True
+        if not st.session_state.order_log.empty:
+            st.session_state.order_log.to_excel(writer, sheet_name="Order_Log", index=False)
+            sheets_written = True
+
+        if not sheets_written:
+            st.warning("⚠️ All dataframes are empty. Nothing to export.")
+            st.stop()
+
+    st.download_button(
+        label="⬇️ Download Excel",
+        data=output.getvalue(),
+        file_name=f"MMCCCL_lab_inventory_export_{timestamp}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
