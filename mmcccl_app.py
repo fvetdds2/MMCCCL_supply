@@ -2,8 +2,15 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import io
+# --- Function: Safe Excel String Conversion ---
+def excel_safe(df):
+df = df.copy()
+for col in df.columns:
+if pd.api.types.is_datetime64_any_dtype(df[col]):
+df[col] = df[col].dt.strftime('%Y-%m-%d')
+return df
 # Page setup
-st.set_page_config(page_title="Lab Supply Tracker", layout="wide")
+st.set_page_config(page_title="MMCCCL Lab Supply Tracker", layout="wide")
 
 
 # Create the output path
