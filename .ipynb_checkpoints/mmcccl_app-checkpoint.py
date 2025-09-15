@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, date
 import io
 # Page setup
 st.set_page_config(page_title="MMCCCL Lab Supply Tracker", layout="wide")
@@ -17,6 +17,15 @@ st.markdown("""
 
 st.image("mmcccl_logo.png", use_container_width=True)
 
+def to_dt(x):
+    if x is None:
+        return pd.NaT
+    try:
+        if isinstance(x, date):
+            return pd.to_datetime(x)
+        return pd.to_datetime(x)
+    except Exception:
+        return pd.NaT
 # ---- Load Excel Data ----
 @st.cache_data
 def load_data():
@@ -376,3 +385,4 @@ with tab4:
                           file_name="MMCCCL_lab_inventory_export.xlsx",
                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     else:
+        st.info("No data to export yet.")
