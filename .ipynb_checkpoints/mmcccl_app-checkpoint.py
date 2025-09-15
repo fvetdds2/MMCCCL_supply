@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime
 import io
 # Page setup
-st.set_page_config(page_title="Lab Supply Tracker", layout="wide")
+st.set_page_config(page_title="MMCCCL Lab Supply Tracker", layout="wide")
 
 # --- Style ---
 st.markdown("""
@@ -80,10 +80,10 @@ with tab1:
         item_data = st.session_state.df[st.session_state.df['cat_no.'] == selected_cat]
         item_name = item_data['item'].values[0] if not item_data.empty else "N/A"
         total_qty = item_data['quantity'].sum() if not item_data.empty else 0
-        
+
         # Display the metric here to always show the latest quantity
         st.metric(label=f"{item_name} (Cat#: {selected_cat})", value=total_qty)
-        
+
         col1, col2 = st.columns(2)
         with col1:
             add_qty = st.number_input("Add Quantity", min_value=0, step=1, key="add_qty")
@@ -282,7 +282,7 @@ with tab3:
             </p>
         """, unsafe_allow_html=True)
 
-    
+
     # --- Combine All Items to Show ---
     reorder_items = pd.concat([expired, soon_expire, urgent_reorder]).drop_duplicates()
 
@@ -376,4 +376,3 @@ with tab4:
                           file_name="MMCCCL_lab_inventory_export.xlsx",
                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     else:
-        st.warning("No data to export.")
