@@ -20,45 +20,47 @@ st.markdown("""
 st.image("mmcccl_logo.png", use_container_width=True)
 
 # ----------------------------
-# Robust Excel writer (ALWAYS leaves at least one visible active sheet)
+# Robust Excel writer (ALWAYS creates a visible sheet)
 # ----------------------------
 def build_excel_bytes(sheets: dict) -> bytes:
     """
     Write a dict of {sheet_name: DataFrame} to an in-memory Excel file safely.
-    - Only writes non-empty DataFrames as sheets.
-    - If none are written, adds an 'Info' sheet with a message.
-    - Ensures at least one sheet is visible and marks it active to avoid the
-      openpyxl 'At least one sheet must be visible' error.
+    - Writes all DataFrames (even if empty) so at least one sheet exists.
+    - If no valid DataFrame provided, writes a small 'Info' sheet.
+    - For openpyxl, forces first sheet visible & active.
+    - Prefers xlsxwriter if installed (more forgiving); falls back to openpyxl.
     """
     output = io.BytesIO()
-    with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        # Write non-empty sheets (truncate sheet names to Excel's 31-char limit)
-        for name, df in sheets.items():
-            if isinstance(df, pd.DataFrame) and not df.empty:
-                safe_name = str(name)[:31]
+
+    # Prefer xlsxwriter if available
+    try:
+        import xlsxwriter  # noqa: F401
+        engine = "xlsxwriter"
+    except Exception:
+        engine = "openpyxl"
+
+    with pd.ExcelWriter(output, engine=engine) as writer:
+        wrote_any = False
+        for name, df in (sheets or {}).items():
+            if isinstance(df, pd.DataFrame):
+                safe_name = (str(name) or "Sheet1")[:31]
+                # Write even if empty -> guarantees at least one sheet exists
                 df.to_excel(writer, sheet_name=safe_name, index=False)
+                wrote_any = True
 
-        # Access the openpyxl workbook
-        book = writer.book
+        if not wrote_any:
+            pd.DataFrame({"Info": ["No data available to export."]}).to_excel(
+                writer, sheet_name="Info", index=False
+            )
 
-        # If nothing got written, add a placeholder visible sheet
-        if len(book.worksheets) == 0:
-            ws = book.create_sheet(title="Info")
-            ws.append(["No data available to export."])
-
-        # Make sure at least one sheet is visible
-        visible_found = False
-        for ws in book.worksheets:
-            # openpyxl uses 'visible', 'hidden', 'veryHidden'
-            if getattr(ws, "sheet_state", "visible") == "visible":
-                visible_found = True
-                break
-        if not visible_found:
-            # Unhide the first worksheet
-            book.worksheets[0].sheet_state = "visible"
-
-        # Ensure the first (visible) worksheet is active
-        book.active = 0
+        # Ensure at least one visible, active sheet when using openpyxl
+        if engine == "openpyxl":
+            book = writer.book
+            # Unhide all sheets just in case
+            for ws in book.worksheets:
+                ws.sheet_state = "visible"
+            # Activate the first sheet
+            book.active = 0
 
     return output.getvalue()
 
@@ -83,10 +85,8 @@ def load_data():
     if 'shelf' not in df.columns: df['shelf'] = ""
     if 'order_unit' not in df.columns: df['order_unit'] = ""
     if 'minimum_stock_level' not in df.columns: df['minimum_stock_level'] = 0
-    if 'cat_no.' in df.columns:
-        df['cat_no.'] = df['cat_no.'].astype(str)
-    if 'item' in df.columns:
-        df['item'] = df['item'].astype(str)
+    if 'cat_no.' in df.columns: df['cat_no.'] = df['cat_no.'].astype(str)
+    if 'item' in df.columns: df['item'] = df['item'].astype(str)
     return df
 
 # ----------------------------
@@ -186,13 +186,15 @@ with tab1:
 
             # --- Add flow
             if add_qty > 0:
+                # Ensure we store a Timestamp to match df type
+                exp_ts = pd.to_datetime(expiration_date_add) if pd.notna(expiration_date_add) else pd.NaT
                 new_row = {
                     'item': item_name,
                     'cat_no.': selected_cat,
                     'quantity': int(add_qty),
                     'location': item_data['location'].iloc[0] if not item_data.empty else "",
                     'shelf': item_data['shelf'].iloc[0] if not item_data.empty else "",
-                    'expiration': expiration_date_add,
+                    'expiration': exp_ts,
                     'lot #': lot_number_add,
                     'ordered': False,
                     'order_date': pd.NaT
@@ -209,14 +211,14 @@ with tab1:
                         'quantity': int(add_qty),
                         'initials': user_initials,
                         'lot #': lot_number_add,
-                        'expiration': expiration_date_add
+                        'expiration': exp_ts
                     }])],
                     ignore_index=True
                 )
 
             # --- Remove flow
             if remove_qty > 0:
-                remove_qty_selected = int(remove_qty)  # keep original for logging
+                remove_qty_selected = int(remove_qty)
                 idx_match = st.session_state.df[
                     (st.session_state.df['cat_no.'] == selected_cat)
                     & (st.session_state.df['lot #'] == lot_number_remove)
@@ -262,9 +264,7 @@ with tab1:
             use_container_width=True
         )
 
-        # ----------------------------
         # Download button (Tab 1) — SAFE
-        # ----------------------------
         excel_bytes = build_excel_bytes({
             "Inventory": st.session_state.df,
             "Update_Log": st.session_state.log
