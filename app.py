@@ -22,7 +22,7 @@ st.markdown("""
 col_logo, col_title = st.columns([1, 3])
 with col_logo:
     try:
-        st.image("mmcccl_logo.png", width=350)
+        st.image("mmcccl_logo.png", width=450)
     except:
         st.write("")
 with col_title:
@@ -109,20 +109,20 @@ fig_service = px.bar(
 st.plotly_chart(fig_service, use_container_width=True)
 
 # --- Requester Breakdown (slide-generation only) ---
-st.subheader("👩‍🔬 Quantity by Requester (Slide Generation)")
+st.subheader("👩‍🔬 Quantity by Requester (Histology Slide Preparation)")
 requester_summary = slide_df.groupby("Requester Name", as_index=False)["Quantity"].sum()
 fig_requester = px.bar(
     requester_summary,
     x="Requester Name",
     y="Quantity",
     text="Quantity",
-    title="Quantity by Requester (Slide Generation)",
+    title="Quantity by Requester (Histology Slide Preparation)",
     color="Requester Name"
 )
 st.plotly_chart(fig_requester, use_container_width=True)
 
 # --- Slide Generation Trend (slide-generation only) ---
-st.subheader("📈 Histology Slide Generation Over Time")
+st.subheader("📈 Histology Slide Preparation Over Time")
 time_summary = slide_df.groupby("Date", as_index=False)["Quantity"].sum()
 fig_time = px.line(
     time_summary,
