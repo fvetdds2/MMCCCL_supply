@@ -9,4 +9,5 @@ xlsxWriter
 datetime
 numpy
 plotly
+io
 
