@@ -143,7 +143,7 @@ with tab2:
     1. *Dr. Amadou Gaye* — Matched FFPE and frozen tissue samples from 8 African American and 8 non–African American patients.  
        **Status:** In progress (biobank contact and coordination)
     2. *Dr. Chandravanu Dash* — Frozen mouse brain slide preparation for brain region study.  
-       **Status:** Procedure preparation  
+       **Status:** "in review process"
     """)
 
     # --- Load Excel file ---
