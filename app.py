@@ -32,10 +32,15 @@ with col_title:
 # -------------------------------------------------
 # TABS
 # -------------------------------------------------
-tab1, tab2 = st.tabs(["📦 Delivered Services", "⏳ Pending Services"])
+tab1, tab2, tab3, tab4 = st.tabs([
+    "📦 Delivered Services",
+    "⏳ Pending Services",
+    "🧫 FFPE Cancer Tissue Repository",
+    "💰 Recovery Cost"
+])
 
 # -------------------------------------------------
-# TAB 1: DELIVERED SERVICE
+# TAB 1: DELIVERED SERVICES
 # -------------------------------------------------
 with tab1:
     DEFAULT_FILE = Path("lab_record.xlsx")
@@ -124,27 +129,34 @@ with tab1:
         st.info("No 'FFPE Processing & Embedding' records found in this dataset.")
 
     st.divider()
-
     st.subheader("📋 Full Service Report (All Entries)")
     st.dataframe(grouped.sort_values("Date", ascending=False), use_container_width=True)
 
 # -------------------------------------------------
-# TAB 2: PENDING SERVICE
+# TAB 2: PENDING SERVICES
 # -------------------------------------------------
 with tab2:
     st.subheader("⏳ Pending Service Requests")
-    st.write("Dr. Amadou Gaye has requested matched FFPE and frozen tissue samples from eight African American (AA) and eight non-AA patients. We are currently in the process of contacting additional biobanks to locate these specimens.")
+
+    st.markdown("""
+    **Pending Requests:**
+    1. *Dr. Amadou Gaye* — Matched FFPE and frozen tissue samples from 8 African American and 8 non–African American patients.  
+       **Status:** In progress (biobank contact and coordination)
+    2. *Dr. Chandravanu Dash* — Frozen mouse brain slide preparation for brain region study.  
+       **Status:** Procedure preparation  
+    """)
 
     # --- Load Excel file ---
+    st.markdown("""
+    *****List of Biobanks*****
+    """)
     PENDING_FILE = "Cancer_biobanks_USA.xlsx"
-
     try:
         pending_df = pd.read_excel(PENDING_FILE)
     except Exception as e:
         st.error(f"Could not read Excel file: {e}")
         st.stop()
 
-    # --- Editable DataFrame ---
     edited_df = st.data_editor(
         pending_df,
         use_container_width=True,
@@ -152,13 +164,68 @@ with tab2:
         key="pending_editor"
     )
 
-    # --- Download Updated Excel ---
     buffer = BytesIO()
     with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
         edited_df.to_excel(writer, index=False, sheet_name="Pending_Services")
+
     st.download_button(
         label="💾 Download Updated Excel",
         data=buffer.getvalue(),
         file_name="Updated_Pending_Services.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
+# -------------------------------------------------
+# TAB 3: FFPE CANCER TISSUE REPOSITORY
+# -------------------------------------------------
+with tab3:
+    st.subheader("🧫 FFPE Cancer Tissue Repository Overview")
+    repo_file = Path("ffpe_repository.xlsx")
+
+    if repo_file.exists():
+        repo_df = pd.read_excel(repo_file)
+        st.dataframe(repo_df, use_container_width=True)
+
+        st.subheader("📈 Repository Summary by Cancer Type")
+        if "Cancer Type" in repo_df.columns and "Quantity" in repo_df.columns:
+            summary = repo_df.groupby("Cancer Type", as_index=False)["Quantity"].sum()
+            fig_repo = px.bar(summary, x="Cancer Type", y="Quantity",
+                              title="FFPE Samples by Cancer Type", color="Cancer Type")
+            st.plotly_chart(fig_repo, use_container_width=True)
+        else:
+            st.warning("Columns 'Cancer Type' and 'Quantity' not found in the repository file.")
+    else:
+        st.info("No FFPE repository file found. Please upload 'ffpe_repository.xlsx'.")
+
+# -------------------------------------------------
+# TAB 4: RECOVERY COST
+# -------------------------------------------------
+with tab4:
+    st.subheader("💰 Recovery Cost Overview")
+    cost_file = Path("recovery_cost.xlsx")
+
+    if cost_file.exists():
+        cost_df = pd.read_excel(cost_file)
+        st.dataframe(cost_df, use_container_width=True)
+
+        if "Requester Name" in cost_df.columns and "Cost" in cost_df.columns:
+            st.subheader("📊 Cost Breakdown by Requester")
+            summary_cost = cost_df.groupby("Requester Name", as_index=False)["Cost"].sum()
+            fig_cost = px.bar(summary_cost, x="Requester Name", y="Cost", text="Cost",
+                              title="Total Recovery Cost per Requester", color="Requester Name")
+            st.plotly_chart(fig_cost, use_container_width=True)
+
+            st.subheader("📈 Monthly Cost Trend")
+            if "Date" in cost_df.columns:
+                cost_df["Date"] = pd.to_datetime(cost_df["Date"])
+                monthly_cost = cost_df.groupby(cost_df["Date"].dt.to_period("M")).sum(numeric_only=True)
+                monthly_cost.index = monthly_cost.index.astype(str)
+                fig_month = px.line(monthly_cost, x=monthly_cost.index, y="Cost",
+                                    title="Monthly Recovery Cost Trend", markers=True)
+                st.plotly_chart(fig_month, use_container_width=True)
+        else:
+            st.warning("The recovery cost file must include 'Requester Name' and 'Cost' columns.")
+    else:
+        st.info("No recovery cost file found. Please upload 'recovery_cost.xlsx'.")
+
+    
