@@ -7,7 +7,7 @@ from pathlib import Path
 # -------------------------------------------------
 # PAGE SETUP
 # -------------------------------------------------
-st.set_page_config(page_title="In Situ Tissue-omics Core Activity Dashboard", layout="wide")
+st.set_page_config(page_title="Translational Pathology Shared Resource Core Activity Dashboard", layout="wide")
 
 # --- Custom Header Layout ---
 st.markdown("""
