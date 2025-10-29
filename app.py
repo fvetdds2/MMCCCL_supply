@@ -12,7 +12,7 @@ st.set_page_config(page_title="Translational Pathology Shared Resource Core Acti
 # --- Custom Header Layout ---
 st.markdown("""
     <style>
-    .main-header { color:#0072b2; font-size:2rem; font-weight:700; margin:.25rem 0 .5rem 0; }
+    .main-header { color:#0072b2; font-size:1rem; font-weight:700; margin:.25rem 0 .5rem 0; }
     .subtle { color:#666; font-size:.95rem; margin-bottom:.75rem; }
     .metric { font-size:1.5rem; font-weight:600; }
     .pill { display:inline-block; padding:.1rem .5rem; border-radius:999px; background:#eef1f4; margin-right:.25rem; }
