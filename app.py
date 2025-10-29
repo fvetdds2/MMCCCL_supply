@@ -42,7 +42,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- Header Layout ---
-logo_path = "532899f7-5d02-459b-ba4b-dd16035733e8.png"
+logo_path = "mmcccl_logo.png"
 try:
     with open(logo_path, "rb") as f:
         logo_base64 = base64.b64encode(f.read()).decode()
