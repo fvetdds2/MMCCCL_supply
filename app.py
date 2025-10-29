@@ -12,22 +12,37 @@ st.set_page_config(page_title="Translational Pathology Shared Resource Core Acti
 # --- Custom Header Layout ---
 st.markdown("""
     <style>
-    .main-header { color:#0072b2; font-size:1rem; font-weight:700; margin:.25rem 0 .5rem 0; }
-    .subtle { color:#666; font-size:.95rem; margin-bottom:.75rem; }
-    .metric { font-size:1.5rem; font-weight:600; }
-    .pill { display:inline-block; padding:.1rem .5rem; border-radius:999px; background:#eef1f4; margin-right:.25rem; }
+    .core-title {
+        color: #004b8d;
+        font-size: 2rem;
+        font-weight: 700;
+        margin-bottom: .1rem;
+        line-height: 1.2;
+    }
+    .dashboard-subtitle {
+        color: #0072b2;
+        font-size: 1.25rem;
+        font-weight: 600;
+        margin-top: 0;
+    }
     </style>
 """, unsafe_allow_html=True)
 
-# --- Logo and Title ---
+# --- Logo and Title Layout ---
 col_logo, col_title = st.columns([1, 3])
 with col_logo:
     try:
         st.image("mmcccl_logo.png", width=350)
     except:
         st.write("")
+
 with col_title:
-    st.markdown("<h1 class='main-header'>Translational Pathology Shared Resource Core Activity Dashboard</h1>", unsafe_allow_html=True)
+    st.markdown("""
+        <div>
+            <div class='core-title'>In Situ Tissue-Omics Core</div>
+            <div class='dashboard-subtitle'>Translational Pathology Shared Resource Core Activity Dashboard</div>
+        </div>
+    """, unsafe_allow_html=True)
 
 # -------------------------------------------------
 # TABS
