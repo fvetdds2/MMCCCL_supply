@@ -3,46 +3,62 @@ import pandas as pd
 import plotly.express as px
 from io import BytesIO
 from pathlib import Path
+import base64
 
-# -------------------------------------------------
-# PAGE SETUP
-# -------------------------------------------------
-st.set_page_config(page_title="Translational Pathology Shared Resource Core Activity Dashboard", layout="wide")
+st.set_page_config(page_title="In Situ Tissue-Omics Core Dashboard", layout="wide")
 
-# --- Custom Header Layout ---
+# --- Custom CSS for layout and font styling ---
 st.markdown("""
     <style>
+    .header-container {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 2rem;
+        margin-bottom: 1.5rem;
+    }
+    .core-title-block {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
     .core-title {
         color: #004b8d;
-        font-size: 2rem;
-        font-weight: 700;
-        margin-bottom: .1rem;
+        font-size: 2.25rem;
+        font-weight: 800;
+        font-family: 'Segoe UI', Roboto, sans-serif;
+        margin: 0;
         line-height: 1.2;
     }
     .dashboard-subtitle {
-        color: #0072b2;
-        font-size: 1.25rem;
+        color: #0066a1;
+        font-size: 1.4rem;
         font-weight: 600;
-        margin-top: 0;
+        font-family: 'Segoe UI', Roboto, sans-serif;
+        margin-top: .25rem;
+        line-height: 1.2;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# --- Logo and Title Layout ---
-col_logo, col_title = st.columns([1, 3])
-with col_logo:
-    try:
-        st.image("mmcccl_logo.png", width=350)
-    except:
-        st.write("")
+# --- Header Layout ---
+logo_path = "532899f7-5d02-459b-ba4b-dd16035733e8.png"
+try:
+    with open(logo_path, "rb") as f:
+        logo_base64 = base64.b64encode(f.read()).decode()
+    logo_html = f"<img src='data:image/png;base64,{logo_base64}' width='380'>"
+except FileNotFoundError:
+    logo_html = "<div style='color:red;'>Logo not found</div>"
 
-with col_title:
-    st.markdown("""
-        <div>
-            <div class='core-title'>In Situ Tissue-Omics Core</div>
-            <div class='dashboard-subtitle'>Translational Pathology Shared Resource Core Activity Dashboard</div>
+st.markdown(f"""
+    <div class='header-container'>
+        {logo_html}
+        <div class='core-title-block'>
+            <h1 class='core-title'>In Situ Tissue-Omics Core</h1>
+            <h2 class='dashboard-subtitle'>Translational Pathology Shared Resource Core Activity Dashboard</h2>
         </div>
-    """, unsafe_allow_html=True)
+    </div>
+""", unsafe_allow_html=True)
 
 # -------------------------------------------------
 # TABS
