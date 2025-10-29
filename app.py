@@ -1,21 +1,18 @@
 import streamlit as st
+import base64
 import pandas as pd
 import plotly.express as px
 from io import BytesIO
 from pathlib import Path
-import base64
 
-# -------------------------------------------------
-# PAGE SETUP
-# -------------------------------------------------
 st.set_page_config(page_title="In Situ Tissue-Omics Core Dashboard", layout="wide")
 
-# --- Custom CSS for refined Meharry design ---
+# --- Custom CSS with color enforcement ---
 st.markdown("""
     <style>
     .header-container {
         display: flex;
-        align-items: center;      /* centers vertically */
+        align-items: center;
         justify-content: flex-start;
         gap: 2.25rem;
         margin-bottom: 1.5rem;
@@ -27,20 +24,21 @@ st.markdown("""
         line-height: 1.2;
     }
     .core-title {
-        color: #7A004B;           /* Meharry deep purple */
+        color: #7A004B !important;   /* Enforced purple */
         font-size: 2.6rem;
         font-weight: 800;
         font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', sans-serif;
         letter-spacing: 0.5px;
         margin: 0;
+        line-height: 1.2;
     }
     .dashboard-subtitle {
-        color: #004b8d;           /* deep blue */
-        font-size: 1.1rem;        /* smaller, subtle */
+        color: #004B8D !important;   /* Enforced blue */
+        font-size: 1.1rem;
         font-weight: 600;
         font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', sans-serif;
         margin-top: .35rem;
-        opacity: 0.9;
+        opacity: 0.95;
     }
     </style>
 """, unsafe_allow_html=True)
