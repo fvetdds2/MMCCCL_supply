@@ -48,7 +48,7 @@ logo_path = "mmcccl_logo.png"
 try:
     with open(logo_path, "rb") as f:
         logo_base64 = base64.b64encode(f.read()).decode()
-    logo_html = f"<img src='data:image/png;base64,{logo_base64}' width='380'>"
+    logo_html = f"<img src='data:image/png;base64,{logo_base64}' width='280'>"
 except FileNotFoundError:
     logo_html = "<div style='color:red;'>Logo not found</div>"
 
