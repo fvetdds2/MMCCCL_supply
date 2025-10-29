@@ -27,7 +27,7 @@ with col_logo:
     except:
         st.write("")
 with col_title:
-    st.markdown("<h1 class='main-header'>In Situ Tissue-Omics Core Activity Dashboard</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 class='main-header'>Translational Pathology Shared Resource Core Activity Dashboard</h1>", unsafe_allow_html=True)
 
 # -------------------------------------------------
 # TABS
