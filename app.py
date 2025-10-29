@@ -5,43 +5,47 @@ from io import BytesIO
 from pathlib import Path
 import base64
 
+# -------------------------------------------------
+# PAGE SETUP
+# -------------------------------------------------
 st.set_page_config(page_title="In Situ Tissue-Omics Core Dashboard", layout="wide")
 
-# --- Custom CSS for layout and font styling ---
+# --- Custom CSS for refined Meharry design ---
 st.markdown("""
     <style>
     .header-container {
         display: flex;
-        align-items: center;
+        align-items: center;      /* centers vertically */
         justify-content: flex-start;
-        gap: 2rem;
+        gap: 2.25rem;
         margin-bottom: 1.5rem;
     }
     .core-title-block {
         display: flex;
         flex-direction: column;
         justify-content: center;
+        line-height: 1.2;
     }
     .core-title {
-        color: #004b8d;
-        font-size: 2.25rem;
+        color: #7A004B;           /* Meharry deep purple */
+        font-size: 2.6rem;
         font-weight: 800;
-        font-family: 'Segoe UI', Roboto, sans-serif;
+        font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', sans-serif;
+        letter-spacing: 0.5px;
         margin: 0;
-        line-height: 1.2;
     }
     .dashboard-subtitle {
-        color: #0066a1;
-        font-size: 1.4rem;
+        color: #004b8d;           /* deep blue */
+        font-size: 1.1rem;        /* smaller, subtle */
         font-weight: 600;
-        font-family: 'Segoe UI', Roboto, sans-serif;
-        margin-top: .25rem;
-        line-height: 1.2;
+        font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', sans-serif;
+        margin-top: .35rem;
+        opacity: 0.9;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# --- Header Layout ---
+# --- Load and Display Logo ---
 logo_path = "mmcccl_logo.png"
 try:
     with open(logo_path, "rb") as f:
@@ -50,6 +54,7 @@ try:
 except FileNotFoundError:
     logo_html = "<div style='color:red;'>Logo not found</div>"
 
+# --- Header Layout ---
 st.markdown(f"""
     <div class='header-container'>
         {logo_html}
