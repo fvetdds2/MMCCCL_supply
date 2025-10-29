@@ -144,6 +144,8 @@ with tab2:
        **Status:** In progress (biobank contact and coordination)
     2. *Dr. Chandravanu Dash* — Frozen mouse brain slide preparation for brain region study.  
        **Status:** In review process
+    3. *Dr. Menaka Thounaojam* - Frozen sections from unfixed snap frozen mouse eye tissue.
+       **Status:** In process of optimizing sectioning protocol
     """)
 
     # --- Load Excel file for Biobank list ---
