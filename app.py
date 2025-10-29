@@ -7,7 +7,7 @@ from pathlib import Path
 # -------------------------------------------------
 # PAGE SETUP
 # -------------------------------------------------
-st.set_page_config(page_title="In Situ Tissue-Omics Core Activity Dashboard", layout="wide")
+st.set_page_config(page_title="In Situ Tissue-omics Core Activity Dashboard", layout="wide")
 
 # --- Custom Header Layout ---
 st.markdown("""
@@ -143,37 +143,72 @@ with tab2:
     1. *Dr. Amadou Gaye* — Matched FFPE and frozen tissue samples from 8 African American and 8 non–African American patients.  
        **Status:** In progress (biobank contact and coordination)
     2. *Dr. Chandravanu Dash* — Frozen mouse brain slide preparation for brain region study.  
-       **Status:** "in review process"
+       **Status:** In review process
     """)
 
-    # --- Load Excel file ---
-    st.markdown("""
-    *****List of Biobanks*****
-    """)
+    # --- Load Excel file for Biobank list ---
+    st.markdown("### 📘 List of Biobanks")
     PENDING_FILE = "Cancer_biobanks_USA.xlsx"
     try:
         pending_df = pd.read_excel(PENDING_FILE)
+        edited_df = st.data_editor(
+            pending_df,
+            use_container_width=True,
+            num_rows="dynamic",
+            key="pending_editor"
+        )
+
+        buffer = BytesIO()
+        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+            edited_df.to_excel(writer, index=False, sheet_name="Pending_Services")
+
+        st.download_button(
+            label="💾 Download Updated Biobank List",
+            data=buffer.getvalue(),
+            file_name="Updated_Pending_Services.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
     except Exception as e:
-        st.error(f"Could not read Excel file: {e}")
-        st.stop()
+        st.error(f"Could not read {PENDING_FILE}: {e}")
 
-    edited_df = st.data_editor(
-        pending_df,
-        use_container_width=True,
-        num_rows="dynamic",
-        key="pending_editor"
-    )
+    st.divider()
+    st.subheader("🏷️ Available Tissue Stock Files")
 
-    buffer = BytesIO()
-    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-        edited_df.to_excel(writer, index=False, sheet_name="Pending_Services")
+    # --- BioIVT Stock File ---
+    bioivt_path = Path("BioIVT_stock.xlsx")
+    if bioivt_path.exists():
+        st.markdown("#### 🧬 BioIVT Breast Cancer Tissue Stock")
+        bioivt_df = pd.read_excel(bioivt_path)
+        st.dataframe(bioivt_df, use_container_width=True)
+        bioivt_buffer = BytesIO()
+        with pd.ExcelWriter(bioivt_buffer, engine="openpyxl") as writer:
+            bioivt_df.to_excel(writer, index=False)
+        st.download_button(
+            label="📥 Download BioIVT Stock File",
+            data=bioivt_buffer.getvalue(),
+            file_name="BioIVT_stock.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+    else:
+        st.info("BioIVT_stock.xlsx not found in the directory.")
 
-    st.download_button(
-        label="💾 Download Updated Excel",
-        data=buffer.getvalue(),
-        file_name="Updated_Pending_Services.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+    # --- Cureline Stock File ---
+    cureline_path = Path("Cureline_breast_cancer_stock.xlsx")
+    if cureline_path.exists():
+        st.markdown("#### 🧫 Cureline Breast Cancer Tissue Stock")
+        cureline_df = pd.read_excel(cureline_path)
+        st.dataframe(cureline_df, use_container_width=True)
+        cureline_buffer = BytesIO()
+        with pd.ExcelWriter(cureline_buffer, engine="openpyxl") as writer:
+            cureline_df.to_excel(writer, index=False)
+        st.download_button(
+            label="📥 Download Cureline Stock File",
+            data=cureline_buffer.getvalue(),
+            file_name="Cureline_breast_cancer_stock.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+    else:
+        st.info("Cureline_breast_cancer_stock.xlsx not found in the directory.")
 
 # -------------------------------------------------
 # TAB 3: FFPE CANCER TISSUE REPOSITORY
