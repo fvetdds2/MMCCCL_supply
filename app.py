@@ -264,6 +264,23 @@ with tab2:
     else:
         st.info("Reprocell_stock.xlsx not found in the directory.")
 
+# --- reprocell breast File ---
+    reprocell_path = Path("reprocell_biobank_2.xlsx")
+    if reprocell2_path.exists():
+        st.markdown("#### 🧬 Additional Reprocell Breast Cancer Tissue Stock")
+        reprocell2_df = pd.read_excel(reprocell2_path)
+        st.dataframe(reprocell2_df, use_container_width=True)
+        reprocell2_buffer = BytesIO()
+        with pd.ExcelWriter(reprocell2_buffer, engine="openpyxl") as writer:
+            reprocell2_df.to_excel(writer, index=False)
+        st.download_button(
+            label="📥 Download Reprocell Stock2 File",
+            data=reprocell2_buffer.getvalue(),
+            file_name="Reprocell2_stock.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+    else:
+        st.info("Reprocell_biobank_2.xlsx not found in the directory.")
 # -------------------------------------------------
 # TAB 3: FFPE CANCER TISSUE REPOSITORY
 # -------------------------------------------------
